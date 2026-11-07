@@ -1,0 +1,2624 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polyterra – map and country generator</title>
+    <!-- tailwind (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        night: {
+                            900: '#0a0f20',
+                            850: '#0f1628',
+                            800: '#18233a',
+                            700: '#27344f',
+                            600: '#3a4a6a',
+                            500: '#566888',
+                            400: '#9aa9c4',
+                            300: '#c2cce0',
+                            200: '#dde3ef',
+                            100: '#f4f1ec',
+                        },
+                        dusk: {
+                            teal: '#7fd8d0',
+                            coral: '#ff8a6b',
+                            moss: '#9be39a',
+                            gold: '#ffcf70',
+                            ember: '#ff9a3c'
+                        }
+                    },
+                    fontFamily: {
+                        display: ['Bricolage Grotesque','Hanken Grotesk','sans-serif'],
+                        mono: ['JetBrains Mono', 'Courier New', 'Courier', 'monospace'],
+                        sans: ['Hanken Grotesk', 'Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Polyterra theme: sunrise over misty ridges.
+           The background scene is an inline SVG (.sky); everything else is
+           glass panels on top of it. Colours live in the variables below. */
+        :root {
+            color-scheme: dark;
+            --night: #0f1832;
+            --ink: #f3ece3;
+            --glass: rgba(11, 16, 34, .60);
+            --glass-deep: rgba(6, 10, 24, .45);
+            --edge: rgba(255, 226, 190, .20);
+            --gold: #ffcf70;
+            --ember: #ff9a3c;
+            --teal: #7fd8d0;
+        }
+        ::selection { background: var(--gold); color: #1a0f05; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 226, 190, .25); border-radius: 99px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 185, 90, .8); }
+
+        .glow-warm { box-shadow: 0 0 22px rgba(255, 170, 70, .5), 0 0 44px rgba(255, 120, 60, .25); }
+        .canvas-smooth { image-rendering: auto; }
+        .canvas-pixelated { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+        /* background scene */
+        html { background: var(--night); }
+        body[class] { background: var(--night); color: var(--ink); font-family: 'Hanken Grotesk', 'Inter', system-ui, sans-serif; }
+        .sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+        .sky svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+        /* slight darkening so text stays readable over the bright horizon */
+        body::after {
+            content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background: linear-gradient(180deg, rgba(8,12,30,.34), rgba(8,12,30,.16) 40%, rgba(8,12,30,.30) 75%, rgba(6,10,22,.55));
+        }
+        header[class], main { position: relative; z-index: 1; }
+
+        /* panels (the [class] bits only exist to out-rank Tailwind's utility classes) */
+        header[class] {
+            background: linear-gradient(180deg, rgba(11,16,34,.78), rgba(11,16,34,.50));
+            backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
+            border-bottom-color: var(--edge);
+            box-shadow: 0 10px 40px rgba(4, 6, 18, .4);
+        }
+        main > section[class] {
+            background: var(--glass);
+            backdrop-filter: blur(26px) saturate(1.5); -webkit-backdrop-filter: blur(26px) saturate(1.5);
+            border-color: var(--edge);
+            border-radius: 22px;
+            box-shadow: 0 30px 80px rgba(4,6,18,.5), inset 0 1px 0 rgba(255,236,210,.18);
+        }
+
+        /* the night-* scale doubles as translucent surfaces */
+        html body .bg-night-900 { background-color: var(--glass-deep); }
+        html body .bg-night-850 { background-color: rgba(11,16,34,.55); }
+        html body .bg-night-800 { background-color: rgba(255,240,220,.07); }
+        html body .bg-night-700 { background-color: rgba(255,240,220,.11); }
+        html body .bg-night-600 { background-color: rgba(255,240,220,.17); }
+        html body .hover\:bg-night-600:hover, html body .hover\:bg-night-700:hover { background-color: rgba(255,200,130,.22); }
+        html body .hover\:bg-night-800:hover { background-color: rgba(255,240,220,.13); }
+        html body .bg-night-900\/90, html body .bg-night-900\/80 { background-color: rgba(6,10,24,.42); }
+        html body .bg-night-850\/95 { background-color: rgba(11,16,34,.80); }
+        html body .border-night-700, html body .border-night-700\/60 { border-color: rgba(255,226,190,.14); }
+        html body .border-night-600 { border-color: rgba(255,226,190,.24); }
+        html body .text-night-300 { color: #cfd6e6; }
+        html body .text-night-400 { color: #aab6cf; }
+
+        /* type */
+        h1, h2, h3, h4, #natFullName { font-family: 'Bricolage Grotesque', 'Hanken Grotesk', sans-serif; }
+        #natFullName {
+            background: linear-gradient(100deg, #fff1cf, #ffc872 50%, #ff9a6a);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent; color: transparent;
+        }
+        #natDemonym { color: var(--teal); }
+
+        /* inputs */
+        select[class], input[type="text"][class], textarea[class] {
+            background-color: rgba(5,9,22,.58); color: #f4f1ec;
+            border-color: rgba(255,226,190,.22); border-radius: 10px;
+        }
+        select[class]:focus, input[type="text"][class]:focus, textarea[class]:focus {
+            border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,207,112,.25);
+        }
+        option { background: #121a30; color: #f4f1ec; }
+        button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+            outline: 2px solid var(--gold); outline-offset: 2px;
+        }
+        button, select, input, textarea { transition: transform .18s ease, box-shadow .2s ease, background-color .2s ease, border-color .2s ease, filter .2s ease; }
+        button:hover { box-shadow: 0 6px 20px rgba(255,150,60,.18); }
+        .accent-dusk-teal { accent-color: #ffb457; }
+
+        /* sliders */
+        input[type="range"] { -webkit-appearance: none; appearance: none; height: 20px; background: transparent; }
+        input[type="range"]::-webkit-slider-runnable-track,
+        input[type="range"]::-moz-range-track { height: 4px; border-radius: 99px; background: linear-gradient(90deg, rgba(127,216,208,.6), rgba(255,207,112,.6), rgba(255,138,80,.6)); }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: #fff8e8; border: 0; box-shadow: 0 0 0 4px rgba(255,170,70,.35), 0 0 14px rgba(255,170,70,.85); }
+        input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff8e8; border: 0; box-shadow: 0 0 0 4px rgba(255,170,70,.35), 0 0 14px rgba(255,170,70,.85); }
+
+        /* active tab and selected chips */
+        .tab-btn.border-dusk-teal {
+            border-color: #ffb457; color: #ffe0a8;
+            background: linear-gradient(180deg, transparent, rgba(255,170,70,.18));
+        }
+        html body .bg-dusk-teal { background: linear-gradient(135deg, #ffe29a, #ffa94d); color: #241103; }
+
+        #generateBtn {
+            background: linear-gradient(110deg, #ffd77f, #ff9a3c 55%, #ff6f5e);
+            color: #241103; border: 0;
+            box-shadow: 0 8px 26px rgba(255,140,50,.42), inset 0 1px 0 rgba(255,255,255,.5);
+        }
+        #generateBtn:hover { filter: brightness(1.07) saturate(1.1); }
+        #generateBtn:active { transform: scale(.98); }
+
+        #tab-nation .bg-gradient-to-br {
+            background: linear-gradient(135deg, rgba(127,216,208,.14), rgba(255,207,112,.13) 55%, rgba(255,138,107,.15));
+            border-color: rgba(255,226,190,.28);
+        }
+
+        /* map area */
+        #canvasContainer { background: radial-gradient(ellipse at 50% 40%, rgba(70,52,60,.28), rgba(5,8,20,.55) 75%); }
+        #terrainCanvas { border-radius: 14px; box-shadow: 0 24px 70px rgba(4,6,18,.65), 0 0 0 1px rgba(255,226,190,.22), 0 0 60px rgba(255,150,60,.18); }
+        #mapTooltip { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        #toast { background: rgba(14,20,40,.86); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-color: rgba(255,185,90,.7); }
+
+        /* motion: sun rises once on load, mist drifts very slowly */
+        @media (prefers-reduced-motion: no-preference) {
+            .sky .sun { transform-box: fill-box; transform-origin: center; animation: sunrise 3.2s cubic-bezier(.2,.7,.2,1) both; }
+            @keyframes sunrise { from { transform: translateY(90px) scale(.7); opacity: .25; } to { transform: none; opacity: 1; } }
+            .sky .mist { animation: drift 80s ease-in-out infinite alternate; }
+            .sky .m2 { animation-duration: 105s; animation-direction: alternate-reverse; }
+            .sky .m3 { animation-duration: 90s; }
+            .sky .m4 { animation-duration: 120s; animation-direction: alternate-reverse; }
+            @keyframes drift { from { transform: translateX(-90px); } to { transform: translateX(90px); } }
+            #terrainCanvas { animation: canvas-in .7s cubic-bezier(.2,.7,.2,1) both; }
+            @keyframes canvas-in { from { opacity: .6; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+            #generateBtn:hover { transform: translateY(-2px); }
+        }
+        @media (max-width: 1023px) {
+            main > section[class] { backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3); }
+        }
+    </style>
+</head>
+<body class="bg-night-900 text-night-100 font-sans min-h-screen flex flex-col ">
+    <div class="sky" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" focusable="false"><defs>  <linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1">    <stop offset="0" stop-color="#0f1832"/><stop offset=".22" stop-color="#1f2c55"/>    <stop offset=".40" stop-color="#4a4562"/><stop offset=".52" stop-color="#b8603f"/>    <stop offset=".62" stop-color="#f08f3a"/><stop offset=".70" stop-color="#ffc05f"/>    <stop offset=".78" stop-color="#f7c9a0"/><stop offset="1" stop-color="#e9b08c"/>  </linearGradient>  <radialGradient id="sunG" cx=".5" cy=".5" r=".5">    <stop offset="0" stop-color="#fff3c8" stop-opacity=".95"/><stop offset=".25" stop-color="#ffd27a" stop-opacity=".65"/>    <stop offset=".6" stop-color="#ff9a3c" stop-opacity=".22"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/>  </radialGradient>  <linearGradient id="mistG" x1="0" y1="0" x2="0" y2="1">    <stop offset="0" stop-color="#ffd9b0" stop-opacity="0"/><stop offset=".5" stop-color="#ffd2a2" stop-opacity=".62"/><stop offset="1" stop-color="#ffd2a2" stop-opacity="0"/>  </linearGradient>  <linearGradient id="r1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9a8f9c"/><stop offset="1" stop-color="#d9a587"/></linearGradient>  <linearGradient id="r2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5d6f8d"/><stop offset="1" stop-color="#b58f86"/></linearGradient>  <linearGradient id="r3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34506f"/><stop offset="1" stop-color="#6d7b88"/></linearGradient>  <linearGradient id="r4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#203b52"/><stop offset="1" stop-color="#34505c"/></linearGradient>  <linearGradient id="r5" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c3a2e"/><stop offset=".5" stop-color="#11241f"/><stop offset="1" stop-color="#0a1614"/></linearGradient>  <filter id="cloud" x="-20%" y="-60%" width="140%" height="220%">    <feTurbulence type="fractalNoise" baseFrequency=".006 .018" numOctaves="3" seed="7" result="n"/>    <feDisplacementMap in="SourceGraphic" in2="n" scale="90" xChannelSelector="R" yChannelSelector="G" result="d"/>    <feGaussianBlur in="d" stdDeviation="14"/>  </filter>  <filter id="soft"><feGaussianBlur stdDeviation="22"/></filter>  <filter id="soft2"><feGaussianBlur stdDeviation="9"/></filter></defs><rect width="1600" height="900" fill="url(#skyG)"/><ellipse class="sun" cx="560" cy="560" rx="560" ry="330" fill="url(#sunG)"/><g filter="url(#cloud)">  <ellipse cx="300" cy="300" rx="420" ry="46" fill="#cf7a45" opacity=".55"/>  <ellipse cx="1050" cy="250" rx="520" ry="52" fill="#d9854a" opacity=".5"/>  <ellipse cx="1300" cy="360" rx="480" ry="40" fill="#e8934a" opacity=".55"/>  <ellipse cx="520" cy="430" rx="560" ry="34" fill="#f2a255" opacity=".6"/>  <ellipse cx="1180" cy="480" rx="520" ry="26" fill="#ffb55e" opacity=".65"/>  <ellipse cx="760" cy="150" rx="600" ry="60" fill="#2a2f58" opacity=".55"/>  <ellipse cx="1350" cy="120" rx="400" ry="50" fill="#3b3560" opacity=".5"/>  <ellipse cx="420" cy="360" rx="520" ry="30" fill="#3a2f50" opacity=".5"/>  <ellipse cx="1000" cy="395" rx="640" ry="28" fill="#4a3050" opacity=".55"/></g><path d="M-16,920 L-16.0,566.6 L0.0,573.5 L16.0,580.0 L32.0,585.4 L48.0,589.3 L64.0,592.0 L80.0,593.9 L96.0,595.7 L112.0,598.1 L128.0,601.3 L144.0,605.0 L160.0,608.8 L176.0,611.7 L192.0,613.0 L208.0,612.0 L224.0,608.6 L240.0,603.3 L256.0,597.0 L272.0,590.7 L288.0,585.5 L304.0,582.3 L320.0,581.2 L336.0,582.0 L352.0,584.1 L368.0,586.6 L384.0,588.6 L400.0,589.7 L416.0,589.8 L432.0,589.3 L448.0,588.7 L464.0,589.0 L480.0,590.5 L496.0,593.3 L512.0,597.3 L528.0,601.5 L544.0,605.1 L560.0,607.3 L576.0,607.3 L592.0,605.3 L608.0,601.7 L624.0,597.5 L640.0,593.6 L656.0,591.2 L672.0,590.8 L688.0,592.7 L704.0,596.5 L720.0,601.4 L736.0,606.7 L752.0,611.6 L768.0,615.7 L784.0,619.2 L800.0,622.5 L816.0,626.3 L832.0,631.2 L848.0,637.5 L864.0,645.3 L880.0,654.0 L896.0,662.6 L912.0,670.0 L928.0,675.2 L944.0,677.9 L960.0,677.8 L976.0,675.6 L992.0,672.0 L1008.0,668.3 L1024.0,665.2 L1040.0,663.3 L1056.0,662.7 L1072.0,662.9 L1088.0,663.3 L1104.0,663.1 L1120.0,661.9 L1136.0,659.5 L1152.0,656.3 L1168.0,652.9 L1184.0,650.2 L1200.0,648.8 L1216.0,649.2 L1232.0,651.2 L1248.0,654.2 L1264.0,657.2 L1280.0,659.1 L1296.0,659.1 L1312.0,656.6 L1328.0,651.9 L1344.0,645.5 L1360.0,638.2 L1376.0,631.2 L1392.0,625.2 L1408.0,620.6 L1424.0,617.3 L1440.0,615.0 L1456.0,612.9 L1472.0,610.3 L1488.0,607.0 L1504.0,602.9 L1520.0,598.7 L1536.0,595.2 L1552.0,593.1 L1568.0,593.3 L1584.0,595.9 L1600.0,600.7 L1616.0,606.9 L1632,920 Z" fill="url(#r1)" opacity=".85"/><rect class="mist m1" x="-300" y="560" width="2200" height="120" fill="url(#mistG)" filter="url(#soft)"/><path d="M-14,920 L-14.0,654.2 L0.0,663.1 L14.0,667.4 L28.0,671.0 L42.0,671.4 L56.0,674.1 L70.0,670.0 L84.0,669.2 L98.0,665.8 L112.0,671.6 L126.0,684.5 L140.0,690.0 L154.0,701.1 L168.0,711.4 L182.0,716.2 L196.0,719.6 L210.0,718.6 L224.0,712.9 L238.0,713.9 L252.0,712.6 L266.0,712.4 L280.0,712.8 L294.0,706.8 L308.0,700.0 L322.0,687.6 L336.0,678.2 L350.0,667.5 L364.0,661.9 L378.0,659.4 L392.0,664.0 L406.0,671.7 L420.0,675.1 L434.0,681.7 L448.0,686.9 L462.0,689.8 L476.0,693.4 L490.0,695.8 L504.0,699.3 L518.0,706.4 L532.0,708.9 L546.0,716.6 L560.0,716.4 L574.0,717.6 L588.0,708.8 L602.0,702.2 L616.0,700.4 L630.0,695.1 L644.0,690.9 L658.0,697.5 L672.0,700.7 L686.0,710.7 L700.0,717.4 L714.0,716.1 L728.0,714.9 L742.0,716.6 L756.0,716.9 L770.0,716.3 L784.0,714.8 L798.0,718.4 L812.0,722.4 L826.0,717.8 L840.0,709.9 L854.0,696.7 L868.0,676.2 L882.0,663.8 L896.0,647.7 L910.0,638.4 L924.0,633.7 L938.0,626.7 L952.0,627.1 L966.0,620.1 L980.0,617.8 L994.0,609.9 L1008.0,606.0 L1022.0,603.1 L1036.0,599.9 L1050.0,605.1 L1064.0,613.7 L1078.0,615.1 L1092.0,621.0 L1106.0,617.6 L1120.0,608.7 L1134.0,601.8 L1148.0,597.3 L1162.0,586.7 L1176.0,589.7 L1190.0,591.2 L1204.0,592.0 L1218.0,598.8 L1232.0,601.9 L1246.0,604.7 L1260.0,605.6 L1274.0,604.7 L1288.0,611.5 L1302.0,617.8 L1316.0,630.5 L1330.0,642.4 L1344.0,650.3 L1358.0,660.2 L1372.0,661.7 L1386.0,657.1 L1400.0,655.3 L1414.0,648.7 L1428.0,638.6 L1442.0,635.6 L1456.0,637.4 L1470.0,636.7 L1484.0,631.4 L1498.0,626.1 L1512.0,624.6 L1526.0,613.7 L1540.0,609.3 L1554.0,609.6 L1568.0,613.9 L1582.0,622.9 L1596.0,632.4 L1610.0,635.7 L1624.0,646.1 L1628,920 Z" fill="url(#r2)"/><rect class="mist m2" x="-300" y="610" width="2200" height="130" fill="url(#mistG)" filter="url(#soft)"/><path d="M-12,920 L-12.0,715.7 L0.0,717.4 L12.0,716.9 L24.0,732.2 L36.0,735.0 L48.0,741.1 L60.0,740.7 L72.0,732.8 L84.0,737.9 L96.0,736.2 L108.0,743.8 L120.0,751.8 L132.0,769.9 L144.0,789.5 L156.0,802.0 L168.0,813.3 L180.0,815.7 L192.0,820.0 L204.0,823.6 L216.0,818.6 L228.0,823.1 L240.0,822.5 L252.0,826.1 L264.0,821.8 L276.0,811.3 L288.0,802.5 L300.0,785.5 L312.0,770.5 L324.0,760.0 L336.0,752.1 L348.0,752.6 L360.0,752.4 L372.0,754.3 L384.0,763.3 L396.0,754.3 L408.0,756.3 L420.0,753.1 L432.0,747.9 L444.0,743.0 L456.0,745.2 L468.0,742.9 L480.0,743.1 L492.0,738.2 L504.0,733.4 L516.0,718.0 L528.0,708.0 L540.0,699.7 L552.0,686.3 L564.0,685.8 L576.0,686.3 L588.0,695.5 L600.0,701.3 L612.0,715.6 L624.0,719.2 L636.0,714.4 L648.0,725.4 L660.0,719.2 L672.0,724.5 L684.0,739.4 L696.0,746.5 L708.0,743.7 L720.0,743.2 L732.0,738.0 L744.0,728.1 L756.0,713.4 L768.0,703.8 L780.0,695.5 L792.0,682.3 L804.0,676.5 L816.0,674.6 L828.0,677.4 L840.0,679.1 L852.0,671.9 L864.0,662.6 L876.0,659.3 L888.0,658.8 L900.0,658.3 L912.0,659.2 L924.0,667.5 L936.0,670.0 L948.0,667.3 L960.0,661.4 L972.0,642.8 L984.0,629.4 L996.0,625.2 L1008.0,614.0 L1020.0,609.5 L1032.0,617.6 L1044.0,620.4 L1056.0,618.6 L1068.0,622.3 L1080.0,625.5 L1092.0,626.4 L1104.0,634.3 L1116.0,647.1 L1128.0,658.4 L1140.0,675.3 L1152.0,700.6 L1164.0,713.0 L1176.0,723.2 L1188.0,721.6 L1200.0,727.5 L1212.0,721.8 L1224.0,723.1 L1236.0,724.9 L1248.0,727.5 L1260.0,728.4 L1272.0,734.7 L1284.0,738.8 L1296.0,739.8 L1308.0,734.8 L1320.0,731.1 L1332.0,729.9 L1344.0,731.4 L1356.0,747.3 L1368.0,752.5 L1380.0,763.4 L1392.0,775.0 L1404.0,778.9 L1416.0,775.2 L1428.0,761.4 L1440.0,761.0 L1452.0,749.7 L1464.0,745.7 L1476.0,748.5 L1488.0,748.2 L1500.0,739.1 L1512.0,739.3 L1524.0,726.7 L1536.0,714.6 L1548.0,714.4 L1560.0,715.6 L1572.0,723.4 L1584.0,732.6 L1596.0,746.4 L1608.0,762.4 L1620.0,767.6 L1624,920 Z" fill="url(#r3)"/><rect class="mist m3" x="-300" y="680" width="2200" height="120" fill="url(#mistG)" filter="url(#soft)"/><path d="M-12,920 L-12.0,717.2 L0.0,714.7 L12.0,712.8 L24.0,706.0 L36.0,707.5 L48.0,707.8 L60.0,715.2 L72.0,721.9 L84.0,737.6 L96.0,752.7 L108.0,764.1 L120.0,767.0 L132.0,781.4 L144.0,781.2 L156.0,785.6 L168.0,795.4 L180.0,789.7 L192.0,802.4 L204.0,797.0 L216.0,802.9 L228.0,816.3 L240.0,815.6 L252.0,819.6 L264.0,829.0 L276.0,822.4 L288.0,827.0 L300.0,814.6 L312.0,814.4 L324.0,809.2 L336.0,820.8 L348.0,820.6 L360.0,822.4 L372.0,829.9 L384.0,843.0 L396.0,842.3 L408.0,849.0 L420.0,859.7 L432.0,863.4 L444.0,857.1 L456.0,858.9 L468.0,854.2 L480.0,854.9 L492.0,855.5 L504.0,860.2 L516.0,859.3 L528.0,855.3 L540.0,850.5 L552.0,850.5 L564.0,840.6 L576.0,834.9 L588.0,821.2 L600.0,814.0 L612.0,809.1 L624.0,804.5 L636.0,801.5 L648.0,800.9 L660.0,792.8 L672.0,796.2 L684.0,802.1 L696.0,813.9 L708.0,810.4 L720.0,818.6 L732.0,810.3 L744.0,813.4 L756.0,813.0 L768.0,816.4 L780.0,821.8 L792.0,821.1 L804.0,825.1 L816.0,839.0 L828.0,840.7 L840.0,839.3 L852.0,839.4 L864.0,839.4 L876.0,833.7 L888.0,821.1 L900.0,823.1 L912.0,818.8 L924.0,810.1 L936.0,814.5 L948.0,808.8 L960.0,818.9 L972.0,815.5 L984.0,825.5 L996.0,821.7 L1008.0,824.1 L1020.0,823.8 L1032.0,828.7 L1044.0,828.0 L1056.0,829.0 L1068.0,827.9 L1080.0,823.9 L1092.0,833.8 L1104.0,834.3 L1116.0,831.7 L1128.0,835.7 L1140.0,829.8 L1152.0,824.0 L1164.0,808.9 L1176.0,803.8 L1188.0,780.9 L1200.0,773.7 L1212.0,762.0 L1224.0,755.7 L1236.0,750.4 L1248.0,740.4 L1260.0,738.1 L1272.0,735.8 L1284.0,741.7 L1296.0,730.6 L1308.0,721.3 L1320.0,719.9 L1332.0,717.1 L1344.0,712.9 L1356.0,718.2 L1368.0,713.7 L1380.0,717.2 L1392.0,731.2 L1404.0,731.5 L1416.0,734.9 L1428.0,740.3 L1440.0,736.2 L1452.0,730.8 L1464.0,726.7 L1476.0,728.7 L1488.0,725.7 L1500.0,713.8 L1512.0,715.1 L1524.0,713.0 L1536.0,714.7 L1548.0,724.9 L1560.0,724.5 L1572.0,730.6 L1584.0,726.4 L1596.0,728.6 L1608.0,734.5 L1620.0,732.4 L1624,920 Z" fill="url(#r4)"/><rect class="mist m4" x="-300" y="760" width="2200" height="110" fill="url(#mistG)" opacity=".7" filter="url(#soft)"/><path d="M-10,920 L-10.0,890.8 L0.0,891.0 L10.0,892.7 L20.0,892.2 L30.0,900.5 L40.0,898.7 L50.0,889.5 L60.0,891.0 L70.0,894.8 L80.0,889.2 L90.0,894.5 L100.0,892.5 L110.0,891.8 L120.0,894.2 L130.0,895.3 L140.0,891.3 L150.0,889.1 L160.0,890.9 L170.0,885.1 L180.0,878.7 L190.0,884.1 L200.0,877.6 L210.0,875.2 L220.0,865.2 L230.0,864.3 L240.0,861.4 L250.0,861.6 L260.0,855.8 L270.0,856.5 L280.0,861.0 L290.0,859.3 L300.0,867.8 L310.0,869.3 L320.0,865.7 L330.0,875.1 L340.0,877.7 L350.0,880.1 L360.0,874.6 L370.0,873.8 L380.0,882.3 L390.0,879.0 L400.0,881.1 L410.0,883.7 L420.0,886.9 L430.0,888.1 L440.0,893.5 L450.0,888.6 L460.0,898.3 L470.0,896.9 L480.0,896.9 L490.0,896.9 L500.0,897.8 L510.0,895.5 L520.0,888.7 L530.0,893.2 L540.0,889.7 L550.0,885.5 L560.0,878.4 L570.0,879.5 L580.0,878.6 L590.0,881.3 L600.0,881.1 L610.0,876.7 L620.0,882.1 L630.0,880.9 L640.0,884.0 L650.0,883.8 L660.0,885.0 L670.0,877.2 L680.0,879.1 L690.0,879.1 L700.0,880.3 L710.0,873.0 L720.0,874.8 L730.0,878.6 L740.0,878.2 L750.0,871.0 L760.0,878.0 L770.0,877.9 L780.0,881.5 L790.0,873.7 L800.0,879.2 L810.0,874.1 L820.0,869.6 L830.0,867.5 L840.0,864.2 L850.0,859.7 L860.0,849.5 L870.0,847.9 L880.0,838.6 L890.0,830.1 L900.0,826.2 L910.0,825.2 L920.0,823.3 L930.0,825.7 L940.0,817.6 L950.0,815.4 L960.0,819.9 L970.0,821.5 L980.0,815.2 L990.0,814.4 L1000.0,808.3 L1010.0,807.4 L1020.0,808.9 L1030.0,806.7 L1040.0,806.6 L1050.0,805.1 L1060.0,806.5 L1070.0,808.3 L1080.0,815.5 L1090.0,812.9 L1100.0,823.9 L1110.0,825.1 L1120.0,825.0 L1130.0,832.4 L1140.0,827.9 L1150.0,831.0 L1160.0,830.3 L1170.0,831.5 L1180.0,826.8 L1190.0,822.9 L1200.0,826.4 L1210.0,817.2 L1220.0,814.9 L1230.0,819.4 L1240.0,819.6 L1250.0,818.1 L1260.0,821.2 L1270.0,822.7 L1280.0,826.1 L1290.0,826.9 L1300.0,829.4 L1310.0,832.5 L1320.0,825.9 L1330.0,827.0 L1340.0,833.5 L1350.0,826.0 L1360.0,824.7 L1370.0,831.9 L1380.0,829.1 L1390.0,839.2 L1400.0,838.9 L1410.0,841.5 L1420.0,850.0 L1430.0,855.6 L1440.0,861.1 L1450.0,860.2 L1460.0,864.9 L1470.0,864.4 L1480.0,863.1 L1490.0,866.0 L1500.0,862.7 L1510.0,864.2 L1520.0,855.7 L1530.0,852.8 L1540.0,855.2 L1550.0,854.5 L1560.0,849.2 L1570.0,850.2 L1580.0,846.0 L1590.0,846.2 L1600.0,848.4 L1610.0,847.6 L1620,920 Z" fill="url(#r5)"/><path d="M-10,920 L-10.0,890.8 L0.0,891.0 L10.0,892.7 L20.0,892.2 L30.0,900.5 L40.0,898.7 L50.0,889.5 L60.0,891.0 L70.0,894.8 L80.0,889.2 L90.0,894.5 L100.0,892.5 L110.0,891.8 L120.0,894.2 L130.0,895.3 L140.0,891.3 L150.0,889.1 L160.0,890.9 L170.0,885.1 L180.0,878.7 L190.0,884.1 L200.0,877.6 L210.0,875.2 L220.0,865.2 L230.0,864.3 L240.0,861.4 L250.0,861.6 L260.0,855.8 L270.0,856.5 L280.0,861.0 L290.0,859.3 L300.0,867.8 L310.0,869.3 L320.0,865.7 L330.0,875.1 L340.0,877.7 L350.0,880.1 L360.0,874.6 L370.0,873.8 L380.0,882.3 L390.0,879.0 L400.0,881.1 L410.0,883.7 L420.0,886.9 L430.0,888.1 L440.0,893.5 L450.0,888.6 L460.0,898.3 L470.0,896.9 L480.0,896.9 L490.0,896.9 L500.0,897.8 L510.0,895.5 L520.0,888.7 L530.0,893.2 L540.0,889.7 L550.0,885.5 L560.0,878.4 L570.0,879.5 L580.0,878.6 L590.0,881.3 L600.0,881.1 L610.0,876.7 L620.0,882.1 L630.0,880.9 L640.0,884.0 L650.0,883.8 L660.0,885.0 L670.0,877.2 L680.0,879.1 L690.0,879.1 L700.0,880.3 L710.0,873.0 L720.0,874.8 L730.0,878.6 L740.0,878.2 L750.0,871.0 L760.0,878.0 L770.0,877.9 L780.0,881.5 L790.0,873.7 L800.0,879.2 L810.0,874.1 L820.0,869.6 L830.0,867.5 L840.0,864.2 L850.0,859.7 L860.0,849.5 L870.0,847.9 L880.0,838.6 L890.0,830.1 L900.0,826.2 L910.0,825.2 L920.0,823.3 L930.0,825.7 L940.0,817.6 L950.0,815.4 L960.0,819.9 L970.0,821.5 L980.0,815.2 L990.0,814.4 L1000.0,808.3 L1010.0,807.4 L1020.0,808.9 L1030.0,806.7 L1040.0,806.6 L1050.0,805.1 L1060.0,806.5 L1070.0,808.3 L1080.0,815.5 L1090.0,812.9 L1100.0,823.9 L1110.0,825.1 L1120.0,825.0 L1130.0,832.4 L1140.0,827.9 L1150.0,831.0 L1160.0,830.3 L1170.0,831.5 L1180.0,826.8 L1190.0,822.9 L1200.0,826.4 L1210.0,817.2 L1220.0,814.9 L1230.0,819.4 L1240.0,819.6 L1250.0,818.1 L1260.0,821.2 L1270.0,822.7 L1280.0,826.1 L1290.0,826.9 L1300.0,829.4 L1310.0,832.5 L1320.0,825.9 L1330.0,827.0 L1340.0,833.5 L1350.0,826.0 L1360.0,824.7 L1370.0,831.9 L1380.0,829.1 L1390.0,839.2 L1400.0,838.9 L1410.0,841.5 L1420.0,850.0 L1430.0,855.6 L1440.0,861.1 L1450.0,860.2 L1460.0,864.9 L1470.0,864.4 L1480.0,863.1 L1490.0,866.0 L1500.0,862.7 L1510.0,864.2 L1520.0,855.7 L1530.0,852.8 L1540.0,855.2 L1550.0,854.5 L1560.0,849.2 L1570.0,850.2 L1580.0,846.0 L1590.0,846.2 L1600.0,848.4 L1610.0,847.6 L1620,920" fill="none" stroke="#9fc16a" stroke-opacity=".35" stroke-width="2" filter="url(#soft2)" transform="translate(0,2)"/></svg></div>
+
+    <!-- header -->
+    <header class="bg-night-850 border-b border-night-700 px-4 lg:px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-dusk-teal via-blue-600 to-dusk-coral flex items-center justify-center text-black font-black text-xl glow-warm">
+                <i class="fa-solid fa-earth-americas"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-base lg:text-lg tracking-wider text-white flex items-center gap-2">
+                    POLYTERRA
+                </h1>
+                <p class="text-xs text-night-300 hidden sm:block">Generate a map, then get a country to go with it</p>
+            </div>
+        </div>
+
+        <!-- preset + actions -->
+        <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <div class="flex items-center bg-night-900 border border-night-700 rounded-lg px-2 py-1">
+                <span class="text-[11px] text-night-300 mr-1.5 hidden md:inline">Preset</span>
+                <select id="presetSelect" class="bg-night-800 text-xs text-white px-2 py-1 rounded border border-night-600 focus:outline-none focus:border-dusk-teal cursor-pointer">
+                    <option value="archipelago">Archipelago Paradise</option>
+                    <option value="volcanic">Volcanic Netherland</option>
+                    <option value="mountains">Alpine High Peaks</option>
+                    <option value="desert">Sunken Desert Oasis</option>
+                    <option value="scifi">Xenon Sci-Fi Planet</option>
+                    <option value="paper">Parchment RPG Map</option>
+                    <option value="cyber">Cyberpunk Synthwave</option>
+                    <option value="caves">Cellular Dungeons</option>
+                </select>
+            </div>
+
+            <button id="generateBtn" class="bg-gradient-to-r from-dusk-teal to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-bold px-4 py-1.5 rounded-lg text-xs sm:text-sm flex items-center gap-2 shadow-lg glow-warm transition-all transform hover:-translate-y-0.5 active:translate-y-0">
+                <i class="fa-solid fa-dice"></i> Generate Map
+            </button>
+            <button id="randomSeedBtn" class="bg-night-700 hover:bg-night-600 text-night-100 p-2 rounded-lg text-xs border border-night-600 transition-all" title="Randomize Seed">
+                <i class="fa-solid fa-shuffle"></i>
+            </button>
+            <button id="fullscreenBtn" class="bg-night-700 hover:bg-night-600 text-night-100 p-2 rounded-lg text-xs border border-night-600 transition-all" title="Toggle Fullscreen">
+                <i class="fa-solid fa-expand"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- main layout -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-3 sm:p-4 max-w-[1920px] w-full mx-auto">
+        
+        <!-- sidebar -->
+        <section class="lg:col-span-4 bg-night-850 border border-night-700 rounded-2xl flex flex-col overflow-hidden shadow-2xl max-h-[calc(100vh-90px)]">
+            
+            <!-- tabs -->
+            <div class="flex border-b border-night-700 bg-night-900/80 text-[11px] font-semibold overflow-x-auto">
+                <button class="flex-1 py-3 px-1 text-center text-night-300 hover:text-white transition-all tab-btn whitespace-nowrap" data-target="tab-gen">
+                    <i class="fa-solid fa-sliders mr-1"></i> Gen
+                </button>
+                <button class="flex-1 py-3 px-1 text-center text-dusk-teal border-b-2 border-dusk-teal bg-night-800 transition-all tab-btn whitespace-nowrap" data-target="tab-nation">
+                    <i class="fa-solid fa-flag mr-1"></i> Nation
+                </button>
+                <button class="flex-1 py-3 px-1 text-center text-night-300 hover:text-white transition-all tab-btn whitespace-nowrap" data-target="tab-theme">
+                    <i class="fa-solid fa-palette mr-1"></i> Themes
+                </button>
+                <button class="flex-1 py-3 px-1 text-center text-night-300 hover:text-white transition-all tab-btn whitespace-nowrap" data-target="tab-sculpt">
+                    <i class="fa-solid fa-paintbrush mr-1"></i> Sculpt
+                </button>
+                <button class="flex-1 py-3 px-1 text-center text-night-300 hover:text-white transition-all tab-btn whitespace-nowrap" data-target="tab-export">
+                    <i class="fa-solid fa-download mr-1"></i> Export
+                </button>
+                <button class="flex-1 py-3 px-1 text-center text-night-300 hover:text-white transition-all tab-btn whitespace-nowrap" data-target="tab-code">
+                    <i class="fa-solid fa-code mr-1"></i> Code
+                </button>
+            </div>
+
+            <!-- tab panels -->
+            <div class="p-4 flex-1 overflow-y-auto space-y-5">
+                
+                <!-- generate tab -->
+                <div id="tab-gen" class="tab-pane hidden space-y-4">
+                    <!-- algorithm -->
+                    <div>
+                        <label class="block text-[11px] font-mono text-night-300 mb-1.5">Generation Algorithm</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button class="algo-btn bg-night-900 border border-dusk-teal text-dusk-teal p-2 rounded-lg text-xs font-bold text-left flex flex-col gap-0.5" data-algo="simplex">
+                                <span><i class="fa-solid fa-wave-square text-dusk-teal mr-1"></i> Simplex Noise</span>
+                                <span class="text-[10px] text-night-400 font-normal">Smooth multi-octave</span>
+                            </button>
+                            <button class="algo-btn bg-night-900 border border-night-700 text-night-300 p-2 rounded-lg text-xs font-bold text-left flex flex-col gap-0.5" data-algo="diamond">
+                                <span><i class="fa-solid fa-diamond text-dusk-coral mr-1"></i> Diamond-Square</span>
+                                <span class="text-[10px] text-night-400 font-normal">Rigid mountain peaks</span>
+                            </button>
+                            <button class="algo-btn bg-night-900 border border-night-700 text-night-300 p-2 rounded-lg text-xs font-bold text-left flex flex-col gap-0.5" data-algo="voronoi">
+                                <span><i class="fa-solid fa-shapes text-dusk-gold mr-1"></i> Voronoi Isles</span>
+                                <span class="text-[10px] text-night-400 font-normal">Cellular islands</span>
+                            </button>
+                            <button class="algo-btn bg-night-900 border border-night-700 text-night-300 p-2 rounded-lg text-xs font-bold text-left flex flex-col gap-0.5" data-algo="cellular">
+                                <span><i class="fa-solid fa-cubes text-dusk-moss mr-1"></i> Cellular Cave</span>
+                                <span class="text-[10px] text-night-400 font-normal">Dungeon tunnels</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- size + smoothing -->
+                    <div class="p-3 bg-night-900/90 rounded-xl border border-night-700 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs text-night-200">Map size</label>
+                            <span id="resBadge" class="text-[11px] font-mono px-2 py-0.5 rounded bg-dusk-teal/20 text-dusk-teal border border-dusk-teal/30">256 x 256</span>
+                        </div>
+                        <select id="mapSize" class="w-full bg-night-800 border border-night-600 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-dusk-teal cursor-pointer">
+                            <option value="128">128 x 128 (fast)</option>
+                            <option value="256" selected>256 x 256 (default)</option>
+                            <option value="512">512 x 512 (detailed)</option>
+                            <option value="1024">1024 x 1024 (sharp)</option>
+                            <option value="2048">2048 x 2048 (slow)</option>
+                        </select>
+
+                        <div class="flex items-center justify-between pt-1">
+                            <span class="text-xs text-night-300">Smooth edges</span>
+                            <input type="checkbox" id="smoothnessToggle" checked class="w-4 h-4 accent-dusk-teal cursor-pointer">
+                        </div>
+                    </div>
+
+                    <!-- seed + scale -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[11px] text-night-300 mb-1">World seed</label>
+                            <div class="flex">
+                                <input type="text" id="seedInput" value="POLYTERRA_2026" class="w-full bg-night-900 border border-night-700 rounded-l-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-dusk-teal">
+                                <button id="seedApplyBtn" class="bg-night-700 hover:bg-night-600 px-2.5 rounded-r-lg border-t border-r border-b border-night-700 text-xs"><i class="fa-solid fa-check"></i></button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-night-300">Noise scale</span>
+                                <span id="val-scale" class="text-dusk-teal font-bold">1.0</span>
+                            </div>
+                            <input type="range" id="scaleRange" min="0.2" max="3.0" step="0.1" value="1.0" class="w-full accent-dusk-teal cursor-pointer">
+                        </div>
+                    </div>
+
+                    <!-- noise sliders -->
+                    <div class="space-y-3 pt-2 border-t border-night-700">
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-night-300">Octaves (detail layers)</span>
+                                <span id="val-octaves" class="text-dusk-teal font-bold">5</span>
+                            </div>
+                            <input type="range" id="octavesRange" min="1" max="8" value="5" class="w-full accent-dusk-teal cursor-pointer">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-night-300">Persistence (roughness)</span>
+                                <span id="val-persistence" class="text-dusk-teal font-bold">0.50</span>
+                            </div>
+                            <input type="range" id="persistenceRange" min="0.1" max="0.9" step="0.05" value="0.5" class="w-full accent-dusk-teal cursor-pointer">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-night-300">Lacunarity (frequency)</span>
+                                <span id="val-lacunarity" class="text-dusk-teal font-bold">2.0</span>
+                            </div>
+                            <input type="range" id="lacunarityRange" min="1.0" max="4.0" step="0.1" value="2.0" class="w-full accent-dusk-teal cursor-pointer">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-night-300">Height exponent (cliffs)</span>
+                                <span id="val-exponent" class="text-dusk-teal font-bold">1.2</span>
+                            </div>
+                            <input type="range" id="exponentRange" min="0.5" max="3.0" step="0.1" value="1.2" class="w-full accent-dusk-teal cursor-pointer">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-night-300">Sea level</span>
+                                <span id="val-sealevel" class="text-dusk-teal font-bold">0.40</span>
+                            </div>
+                            <input type="range" id="seaLevelRange" min="0.1" max="0.8" step="0.01" value="0.40" class="w-full accent-dusk-teal cursor-pointer">
+                        </div>
+                    </div>
+
+                    <!-- falloff + erosion -->
+                    <div class="space-y-3 pt-2 border-t border-night-700">
+                        <label class="block text-[11px] font-mono text-night-300 ">Island Gradient Mask</label>
+                        <select id="maskSelect" class="w-full bg-night-900 border border-night-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-dusk-teal cursor-pointer">
+                            <option value="circle">Circular Island Falloff</option>
+                            <option value="square">Square Island Falloff</option>
+                            <option value="border">Border Coastline Shield</option>
+                            <option value="none">None (Infinite Continent)</option>
+                        </select>
+
+                        <div class="grid grid-cols-2 gap-2 pt-1">
+                            <div class="flex items-center justify-between bg-night-900 p-2 rounded-lg border border-night-700">
+                                <span class="text-[11px] text-night-300">Hydraulic Erosion:</span>
+                                <input type="checkbox" id="erosionToggle" checked class="w-4 h-4 accent-dusk-teal cursor-pointer">
+                            </div>
+                            <div class="flex items-center justify-between bg-night-900 p-2 rounded-lg border border-night-700">
+                                <span class="text-[11px] text-night-300">Generate Rivers:</span>
+                                <input type="checkbox" id="riversToggle" checked class="w-4 h-4 accent-dusk-teal cursor-pointer">
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-night-300 font-mono">TREE & OBJECT DENSITY:</span>
+                                <span id="val-props" class="text-dusk-teal font-bold">Medium</span>
+                            </div>
+                            <input type="range" id="propsDensityRange" min="0" max="3" step="1" value="2" class="w-full accent-dusk-teal cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- nation tab -->
+                <div id="tab-nation" class="tab-pane space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-mono text-dusk-teal font-bold"><i id="nation-icon" class="fa-solid fa-flag mr-1"></i> NationStates Profile</span>
+                        <button id="rerollNationBtn" class="bg-night-700 hover:bg-night-600 text-night-100 px-2.5 py-1 rounded-lg text-xs border border-night-600 transition-all">
+                            <i class="fa-solid fa-rotate mr-1"></i> Re-Roll Lore
+                        </button>
+                    </div>
+
+                    <!-- identity -->
+                    <div class="p-4 rounded-xl border border-night-700 bg-night-900 space-y-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <div><div id="natFlag" class="w-24 mb-3 rounded-md overflow-hidden shadow-lg ring-1 ring-white/25" title="Flag (not included in the factbook copy)"></div><span class="text-[10px] text-night-400 ">Official state title</span>
+                                <div id="natFullName" class="font-black text-lg leading-tight">The Republic of Valoria</div>
+                                <div id="natDemonym" class="text-xs text-dusk-teal mt-1">Valorian</div>
+                            </div>
+                            <div class="text-right"><div class="text-[10px] text-night-400 ">Founded</div><div id="natFounded" class="text-sm font-bold text-white">1842</div></div>
+                        </div>
+                        <div class="border-t border-night-700 pt-3 grid grid-cols-2 gap-3 text-xs">
+                            <div><span class="text-[10px] text-night-400 block ">Capital</span><b id="natCapital" class="text-dusk-gold">Aethelgard</b></div>
+                            <div><span class="text-[10px] text-night-400 block ">Government</span><b id="natGov" class="text-dusk-coral">Constitutional Republic</b></div>
+                            <div><span class="text-[10px] text-night-400 block ">Head of state</span><b id="natLeader" class="text-white">President</b></div>
+                            <div><span class="text-[10px] text-night-400 block ">National motto</span><b id="natMotto" class="italic text-night-200">"A shared horizon"</b></div>
+                            <div><span class="text-[10px] text-night-400 block ">Currency</span><b id="natCurrency" class="text-dusk-moss">Valorian Crown</b></div>
+                            <div><span class="text-[10px] text-night-400 block ">Official language</span><b id="natLanguage" class="text-white">Valorian</b></div>
+                        </div>
+                    </div>
+                    <div class="p-3 bg-night-900 rounded-xl border border-night-700 space-y-2 text-xs">
+                        <span class="text-[10px] text-night-400 ">People & prosperity</span>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><span class="text-night-400 block text-[10px]">Population</span><b id="natPop" class="text-white">8.4 million</b></div>
+                            <div><span class="text-night-400 block text-[10px]">National animal</span><b id="natAnimal" class="text-dusk-gold">Marsh crane</b></div>
+                            <div><span class="text-night-400 block text-[10px]">Largest sector</span><b id="natIndustry" class="text-dusk-teal">Manufacturing</b></div>
+                            <div><span class="text-night-400 block text-[10px]">Economic model</span><b id="natEconomy" class="text-white">Export-led mixed economy</b></div>
+                        </div>
+                        <div class="pt-2 border-t border-night-800"><div class="flex justify-between"><span class="text-night-300">Civil liberties</span><b id="natFreedom" class="text-dusk-moss">Competitive democracy</b></div>
+                        <div class="w-full h-1.5 rounded-full bg-night-700 mt-2 overflow-hidden"><div id="natLibertyBar" class="h-full bg-dusk-moss rounded-full" style="width:65%"></div></div></div>
+                    </div>
+                    <div class="p-3 bg-night-900 rounded-xl border border-night-700 space-y-2 text-xs">
+                        <span class="text-[10px] text-night-400 ">Geography & regional character</span>
+                        <p id="natSummary" class="text-night-200 leading-relaxed text-[11px]"></p>
+                        <p id="natRegions" class="text-night-300 leading-relaxed text-[11px]"></p>
+                    </div>
+                    <div class="p-3 bg-night-900 rounded-xl border border-night-700 space-y-2 text-xs">
+                        <span class="text-[10px] text-night-400 ">A short history</span>
+                        <p id="natHistory" class="text-night-200 leading-relaxed text-[11px]"></p>
+                        <p id="natTurningPoint" class="text-night-300 leading-relaxed text-[11px]"></p>
+                    </div>
+                    <div class="p-3 bg-night-900 rounded-xl border border-night-700 space-y-2 text-xs">
+                        <span class="text-[10px] text-night-400 ">Politics & society</span>
+                        <div><b class="text-white">Political fault line</b><p id="natPolitics" class="text-night-300 leading-relaxed mt-1"></p></div>
+                        <div class="border-t border-night-800 pt-2"><b class="text-white">Social character</b><p id="natCulture" class="text-night-300 leading-relaxed mt-1"></p></div>
+                        <div class="border-t border-night-800 pt-2"><b class="text-white">Foreign policy</b><p id="natForeign" class="text-night-300 leading-relaxed mt-1"></p></div>
+                    </div>
+                    <div class="p-3 bg-night-900 rounded-xl border border-night-700 space-y-3 text-xs">
+                        <span class="text-[10px] text-night-400 ">Government, stability & policy</span>
+                        <div><span class="text-night-400 block text-[10px]">How the state works</span><p id="natInstitutions" class="text-night-200 leading-relaxed mt-1"></p></div>
+                        <div class="border-t border-night-800 pt-2"><div class="flex justify-between gap-2"><span class="text-night-300">Political stability</span><b id="natStabilityLabel" class="text-dusk-moss"></b></div><div class="w-full h-1.5 rounded-full bg-night-700 mt-2 overflow-hidden"><div id="natStabilityBar" class="h-full rounded-full bg-dusk-moss" style="width:65%"></div></div><p id="natStabilityDetail" class="text-night-400 text-[10px] mt-1"></p></div>
+                        <div class="border-t border-night-800 pt-2 space-y-2">
+                            <div><div class="flex justify-between gap-2"><span class="text-night-300">Public services & welfare</span><b id="natWelfareValue" class="text-dusk-teal"></b></div><div class="w-full h-1.5 rounded-full bg-night-700 mt-1 overflow-hidden"><div id="natWelfareBar" class="h-full rounded-full bg-dusk-teal"></div></div></div>
+                            <div><div class="flex justify-between gap-2"><span class="text-night-300">Economic regulation</span><b id="natRegulationValue" class="text-dusk-teal"></b></div><div class="w-full h-1.5 rounded-full bg-night-700 mt-1 overflow-hidden"><div id="natRegulationBar" class="h-full rounded-full bg-dusk-teal"></div></div></div>
+                            <div><div class="flex justify-between gap-2"><span class="text-night-300">Regional autonomy</span><b id="natAutonomyValue" class="text-dusk-teal"></b></div><div class="w-full h-1.5 rounded-full bg-night-700 mt-1 overflow-hidden"><div id="natAutonomyBar" class="h-full rounded-full bg-dusk-teal"></div></div></div>
+                            <div><div class="flex justify-between gap-2"><span class="text-night-300">Environmental ambition</span><b id="natGreenValue" class="text-dusk-teal"></b></div><div class="w-full h-1.5 rounded-full bg-night-700 mt-1 overflow-hidden"><div id="natGreenBar" class="h-full rounded-full bg-dusk-teal"></div></div></div>
+                        </div>
+                        <p id="natPolicySummary" class="text-night-300 leading-relaxed text-[11px] border-t border-night-800 pt-2"></p>
+                    </div>
+                    <div class="p-3 bg-night-900 rounded-xl border border-night-700 space-y-2 text-xs">
+                        <span class="text-[10px] text-night-400 ">National profile</span>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><span class="text-night-400 block text-[10px]">National dish</span><b id="natDish" class="text-white"></b></div>
+                            <div><span class="text-night-400 block text-[10px]">Major festival</span><b id="natFestival" class="text-white"></b></div>
+                            <div><span class="text-night-400 block text-[10px]">Sport</span><b id="natSport" class="text-white"></b></div>
+                            <div><span class="text-night-400 block text-[10px]">Demonym plural</span><b id="natPeople" class="text-white"></b></div>
+                        </div>
+                    </div>
+                    <button id="exportFactbookBtn" class="w-full bg-night-700 hover:bg-night-600 text-night-100 py-2.5 rounded-xl text-xs font-bold border border-night-600 transition-all">
+                        <i class="fa-solid fa-book mr-1"></i> Copy Complete Nation Factbook
+                    </button>
+                </div>
+
+                <!-- themes tab -->
+                <div id="tab-theme" class="tab-pane hidden space-y-4">
+                    <div>
+                        <label class="block text-[11px] font-mono text-night-300 mb-2">Preset Color Biomes</label>
+                        <select id="paletteSelect" class="w-full bg-night-900 border border-night-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-dusk-teal cursor-pointer">
+                            <option value="earth">Earth / Classic Fantasy Biome</option>
+                            <option value="desert">Desert / Wasteland Oasis</option>
+                            <option value="volcanic">Volcanic Nether / Lava Ocean</option>
+                            <option value="paper">Parchment / Paper RPG Map</option>
+                            <option value="monochrome">Grayscale Heightmap</option>
+                            <option value="thermal">Thermal / Infrared Heatmap</option>
+                            <option value="custom">Custom Editable Palette</option>
+                        </select>
+                    </div>
+
+                    <!-- swatches -->
+                    <div class="p-3 bg-night-900 rounded-xl border border-night-700 space-y-2">
+                        <span class="text-[11px] text-night-300 block">Biome Level Legend</span>
+                        <div id="paletteSwatches" class="flex flex-col gap-1.5"></div>
+                    </div>
+
+                    <!-- custom colours -->
+                    <div id="customPaletteEditor" class="hidden p-3 bg-night-900 border border-dusk-teal/40 rounded-xl space-y-2">
+                        <span class="text-[11px] font-mono text-dusk-teal block">Custom Palette Editor</span>
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-night-300">Ocean Deep:</span>
+                                <input type="color" id="col-water-deep" value="#0a225c" class="w-8 h-6 bg-transparent cursor-pointer rounded">
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-night-300">Shallow Coast:</span>
+                                <input type="color" id="col-water-shallow" value="#1a60aa" class="w-8 h-6 bg-transparent cursor-pointer rounded">
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-night-300">Beach Sand:</span>
+                                <input type="color" id="col-sand" value="#d4c282" class="w-8 h-6 bg-transparent cursor-pointer rounded">
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-night-300">Low Grassland:</span>
+                                <input type="color" id="col-grass" value="#3a8a38" class="w-8 h-6 bg-transparent cursor-pointer rounded">
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-night-300">High Forest:</span>
+                                <input type="color" id="col-forest" value="#1c5423" class="w-8 h-6 bg-transparent cursor-pointer rounded">
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-night-300">Mountain Rock:</span>
+                                <input type="color" id="col-rock" value="#707070" class="w-8 h-6 bg-transparent cursor-pointer rounded">
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-night-300">Snow Peak:</span>
+                                <input type="color" id="col-snow" value="#ffffff" class="w-8 h-6 bg-transparent cursor-pointer rounded">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- sculpt tab -->
+                <div id="tab-sculpt" class="tab-pane hidden space-y-4">
+                    <div class="p-3 bg-night-900 border border-night-700 rounded-lg text-xs text-night-300">
+                        <i class="fa-solid fa-hand-pointer text-dusk-teal mr-1"></i> Click and drag on the map preview to manually alter terrain elevations in real-time.
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-mono text-night-300 mb-2">Sculpt Tool Mode</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button class="brush-btn bg-dusk-teal/20 border border-dusk-teal text-dusk-teal p-2.5 rounded-lg text-xs font-bold text-center flex flex-col items-center gap-1" data-mode="raise">
+                                <i class="fa-solid fa-arrow-up text-base"></i> Raise
+                            </button>
+                            <button class="brush-btn bg-night-900 border border-night-700 text-night-300 p-2.5 rounded-lg text-xs font-bold text-center flex flex-col items-center gap-1" data-mode="lower">
+                                <i class="fa-solid fa-arrow-down text-base"></i> Lower
+                            </button>
+                            <button class="brush-btn bg-night-900 border border-night-700 text-night-300 p-2.5 rounded-lg text-xs font-bold text-center flex flex-col items-center gap-1" data-mode="smooth">
+                                <i class="fa-solid fa-wand-magic-sparkles text-base"></i> Smooth
+                            </button>
+                            <button class="brush-btn bg-night-900 border border-night-700 text-night-300 p-2.5 rounded-lg text-xs font-bold text-center flex flex-col items-center gap-1" data-mode="flatten">
+                                <i class="fa-solid fa-minus text-base"></i> Flatten
+                            </button>
+                            <button class="brush-btn bg-night-900 border border-night-700 text-night-300 p-2.5 rounded-lg text-xs font-bold text-center flex flex-col items-center gap-1" data-mode="river">
+                                <i class="fa-solid fa-water text-base"></i> Dig River
+                            </button>
+                            <button class="brush-btn bg-night-900 border border-night-700 text-night-300 p-2.5 rounded-lg text-xs font-bold text-center flex flex-col items-center gap-1" data-mode="village">
+                                <i class="fa-solid fa-campground text-base"></i> Village
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-[11px] mb-1">
+                            <span class="text-night-300">Brush radius</span>
+                            <span id="val-brush-size" class="text-dusk-teal font-bold">12 px</span>
+                        </div>
+                        <input type="range" id="brushSizeRange" min="2" max="40" value="12" class="w-full accent-dusk-teal cursor-pointer">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-[11px] mb-1">
+                            <span class="text-night-300">Brush strength</span>
+                            <span id="val-brush-strength" class="text-dusk-teal font-bold">0.15</span>
+                        </div>
+                        <input type="range" id="brushStrengthRange" min="0.02" max="0.5" step="0.02" value="0.15" class="w-full accent-dusk-teal cursor-pointer">
+                    </div>
+
+                    <button id="resetSculptBtn" class="w-full bg-night-700 hover:bg-night-600 text-night-100 py-2.5 rounded-lg text-xs font-bold border border-night-600 transition-all">
+                        <i class="fa-solid fa-rotate-left mr-1"></i> Revert Manual Sculpts
+                    </button>
+                </div>
+
+                <!-- export tab -->
+                <div id="tab-export" class="tab-pane hidden space-y-4">
+                    <!-- main download -->
+                    <button id="downloadMapMainBtn" class="w-full bg-gradient-to-r from-dusk-teal via-blue-600 to-dusk-coral hover:opacity-95 text-black font-black py-3 px-4 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl glow-warm">
+                        <i class="fa-solid fa-file-arrow-down text-base"></i> DOWNLOAD FULL MAP PNG
+                    </button>
+
+                    <div class="space-y-2 pt-2 border-t border-night-700">
+                        <h3 class="text-[11px] text-night-300 ">Game Engine Textures</h3>
+                        <button id="exportHeightmapBtn" class="w-full bg-night-900 hover:bg-night-800 border border-night-700 hover:border-dusk-teal text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-between group">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-file-image text-dusk-teal text-base"></i> Heightmap Grayscale PNG</span>
+                            <i class="fa-solid fa-download text-night-400 group-hover:text-dusk-teal"></i>
+                        </button>
+                        <button id="exportNormalMapBtn" class="w-full bg-night-900 hover:bg-night-800 border border-night-700 hover:border-dusk-teal text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-between group">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-cube text-dusk-moss text-base"></i> Normal Map PNG (Lighting)</span>
+                            <i class="fa-solid fa-download text-night-400 group-hover:text-dusk-moss"></i>
+                        </button>
+                    </div>
+
+                    <div class="space-y-2 pt-2 border-t border-night-700">
+                        <h3 class="text-[11px] text-night-300 ">Raw Map Data & Seed</h3>
+                        <button id="exportJsonBtn" class="w-full bg-night-900 hover:bg-night-800 border border-night-700 hover:border-dusk-teal text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-between group">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-code text-dusk-gold text-base"></i> Height Matrix JSON</span>
+                            <i class="fa-solid fa-download text-night-400 group-hover:text-dusk-gold"></i>
+                        </button>
+                        <button id="copySeedBtn" class="w-full bg-night-900 hover:bg-night-800 border border-night-700 hover:border-dusk-teal text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-between group">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-copy text-dusk-coral text-base"></i> Copy Seed & Config to Clipboard</span>
+                            <i class="fa-solid fa-clipboard text-night-400 group-hover:text-dusk-coral"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- code tab -->
+                <div id="tab-code" class="tab-pane hidden space-y-4">
+                    <div class="flex gap-2">
+                        <button id="codeUnityBtn" class="flex-1 py-1.5 bg-dusk-teal text-black font-bold rounded text-xs">Unity (C#)</button>
+                        <button id="codeGodotBtn" class="flex-1 py-1.5 bg-night-700 text-night-200 hover:text-white rounded text-xs">Godot (GDScript)</button>
+                    </div>
+
+                    <div class="relative">
+                        <textarea id="codeDisplay" readonly class="w-full h-64 bg-night-900 border border-night-700 rounded-xl p-3 text-[11px] font-mono text-dusk-teal focus:outline-none resize-none"></textarea>
+                        <button id="copyCodeSnippetBtn" class="absolute top-2 right-2 bg-night-700 hover:bg-night-600 text-white px-2.5 py-1 rounded text-[10px] font-mono border border-night-600">
+                            Copy Code
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- map view -->
+        <section class="lg:col-span-8 bg-night-850 border border-night-700 rounded-2xl flex flex-col overflow-hidden shadow-2xl relative min-h-[500px]">
+            
+            <!-- view modes -->
+            <div class="bg-night-900/90 border-b border-night-700 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-[11px] text-night-300">View</span>
+                    <div class="flex bg-night-800 border border-night-700 rounded-lg p-0.5 text-xs">
+                        <button class="view-mode-btn px-2.5 py-1 rounded bg-dusk-teal text-black font-bold transition-all" data-view="2d">2D Biome</button>
+                        <button class="view-mode-btn px-2.5 py-1 rounded text-night-300 hover:text-white font-bold transition-all" data-view="3d">3D Isometric</button>
+                        <button class="view-mode-btn px-2.5 py-1 rounded text-night-300 hover:text-white font-bold transition-all" data-view="contour">Topographic</button>
+                        <button class="view-mode-btn px-2.5 py-1 rounded text-night-300 hover:text-white font-bold transition-all" data-view="normal">Normal Map</button>
+                        <button class="view-mode-btn px-2.5 py-1 rounded text-night-300 hover:text-white font-bold transition-all" data-view="slope">Slope Relief</button>
+                    </div>
+                </div>
+
+                <!-- zoom controls -->
+                <div class="flex items-center gap-2">
+                    <div id="angleControl3D" class="hidden flex items-center gap-1.5 mr-2">
+                        <span class="text-[10px] font-mono text-night-300">3D Angle:</span>
+                        <input type="range" id="angle3DRange" min="0" max="360" value="45" class="w-16 accent-dusk-teal">
+                        <span class="text-[10px] font-mono text-night-300 ml-1">Height:</span>
+                        <input type="range" id="height3DRange" min="0.2" max="3" step="0.1" value="1" class="w-16 accent-dusk-teal">
+                    </div>
+                    <button id="zoomInBtn" class="w-8 h-8 rounded-lg bg-night-700 hover:bg-night-600 text-night-100 flex items-center justify-center text-xs" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
+                    <button id="zoomOutBtn" class="w-8 h-8 rounded-lg bg-night-700 hover:bg-night-600 text-night-100 flex items-center justify-center text-xs" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
+                    <button id="centerViewBtn" class="px-2.5 py-1.5 rounded-lg bg-night-700 hover:bg-night-600 text-night-100 text-xs font-mono">Reset View</button>
+                </div>
+            </div>
+
+            <!-- canvas -->
+            <div id="canvasContainer" class="flex-1 relative bg-night-900 flex items-center justify-center overflow-hidden cursor-crosshair p-2">
+                <canvas id="terrainCanvas" class="shadow-2xl rounded-lg canvas-smooth transition-transform duration-75"></canvas>
+
+                <!-- hover tooltip -->
+                <div id="mapTooltip" class="absolute bottom-4 left-4 bg-night-850/95 backdrop-blur border border-night-600 px-3.5 py-2 rounded-xl text-xs font-mono pointer-events-none hidden shadow-2xl z-20">
+                    <div class="flex items-center gap-2 text-dusk-teal font-bold" id="tipCoords">X: 0, Y: 0</div>
+                    <div class="text-night-200 text-[11px] mt-0.5">Elevation: <span class="text-white font-bold" id="tipHeight">0.00</span></div>
+                    <div class="text-night-200 text-[11px]">Biome: <span class="text-dusk-gold font-bold" id="tipBiome">Water</span></div>
+                </div>
+            </div>
+
+            <!-- stats -->
+            <div class="bg-night-900 border-t border-night-700 px-4 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                <div class="bg-night-850 p-2 rounded-lg border border-night-700/60">
+                    <span class="text-night-400 block text-[10px]">Elevation range</span>
+                    <span class="text-white font-bold text-xs" id="statMinMax">0.00 - 1.00</span>
+                </div>
+                <div class="bg-night-850 p-2 rounded-lg border border-night-700/60">
+                    <span class="text-night-400 block text-[10px]">Water coverage</span>
+                    <span class="text-dusk-teal font-bold text-xs" id="statWater">0.0%</span>
+                </div>
+                <div class="bg-night-850 p-2 rounded-lg border border-night-700/60">
+                    <span class="text-night-400 block text-[10px]">Land / forest</span>
+                    <span class="text-dusk-moss font-bold text-xs" id="statForest">0.0%</span>
+                </div>
+                <div class="bg-night-850 p-2 rounded-lg border border-night-700/60">
+                    <span class="text-night-400 block text-[10px]">Rivers / villages</span>
+                    <span class="text-dusk-gold font-bold text-xs" id="statNodes">0 / 0</span>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- toast -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-night-800 border border-dusk-teal text-white px-5 py-3 rounded-2xl shadow-2xl transform translate-y-24 opacity-0 transition-all duration-300 z-50 flex items-center gap-3">
+        <i class="fa-solid fa-circle-check text-dusk-teal text-lg"></i>
+        <div>
+            <h4 class="font-bold text-xs text-dusk-teal" id="toastTitle">Notification</h4>
+            <p class="text-xs text-night-200" id="toastMsg">Action completed successfully.</p>
+        </div>
+    </div>
+
+    <!-- app logic -->
+    <script>
+        // --- High-Performance Pure JavaScript Simplex Noise Class ---
+        class FastSimplexNoise {
+            constructor(seedStr) {
+                let h = 0;
+                for (let i = 0; i < seedStr.length; i++) {
+                    h = (h << 5) - h + seedStr.charCodeAt(i);
+                    h |= 0;
+                }
+                this.p = new Uint8Array(256);
+                for (let i = 0; i < 256; i++) this.p[i] = i;
+                let s = Math.abs(h) || 1337;
+                for (let i = 255; i > 0; i--) {
+                    s = (s * 9301 + 49297) % 233280;
+                    const j = Math.floor((s / 233280) * (i + 1));
+                    const temp = this.p[i];
+                    this.p[i] = this.p[j];
+                    this.p[j] = temp;
+                }
+                this.perm = new Uint8Array(512);
+                this.permMod12 = new Uint8Array(512);
+                for (let i = 0; i < 512; i++) {
+                    this.perm[i] = this.p[i & 255];
+                    this.permMod12[i] = (this.perm[i] % 12);
+                }
+                this.G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
+                this.F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
+                this.grad3 = new Float32Array([
+                    1,1,0, -1,1,0, 1,-1,0, -1,-1,0,
+                    1,0,1, -1,0,1, 1,0,-1, -1,0,-1,
+                    0,1,1, 0,-1,1, 0,1,-1, 0,-1,-1
+                ]);
+            }
+            noise2D(xin, yin) {
+                let n0, n1, n2;
+                const s = (xin + yin) * this.F2;
+                const i = Math.floor(xin + s);
+                const j = Math.floor(yin + s);
+                const t = (i + j) * this.G2;
+                const X0 = i - t;
+                const Y0 = j - t;
+                const x0 = xin - X0;
+                const y0 = yin - Y0;
+
+                let i1, j1;
+                if (x0 > y0) { i1 = 1; j1 = 0; }
+                else { i1 = 0; j1 = 1; }
+
+                const x1 = x0 - i1 + this.G2;
+                const y1 = y0 - j1 + this.G2;
+                const x2 = x0 - 1.0 + 2.0 * this.G2;
+                const y2 = y0 - 1.0 + 2.0 * this.G2;
+
+                const ii = i & 255;
+                const jj = j & 255;
+
+                let t0 = 0.5 - x0*x0 - y0*y0;
+                if (t0 < 0) n0 = 0.0;
+                else {
+                    t0 *= t0;
+                    const gi0 = this.permMod12[ii + this.perm[jj]] * 3;
+                    n0 = t0 * t0 * (this.grad3[gi0] * x0 + this.grad3[gi0 + 1] * y0);
+                }
+
+                let t1 = 0.5 - x1*x1 - y1*y1;
+                if (t1 < 0) n1 = 0.0;
+                else {
+                    t1 *= t1;
+                    const gi1 = this.permMod12[ii + i1 + this.perm[jj + j1]] * 3;
+                    n1 = t1 * t1 * (this.grad3[gi1] * x1 + this.grad3[gi1 + 1] * y1);
+                }
+
+                let t2 = 0.5 - x2*x2 - y2*y2;
+                if (t2 < 0) n2 = 0.0;
+                else {
+                    t2 *= t2;
+                    const gi2 = this.permMod12[ii + 1 + this.perm[jj + 1]] * 3;
+                    n2 = t2 * t2 * (this.grad3[gi2] * x2 + this.grad3[gi2 + 1] * y2);
+                }
+
+                return 70.0 * (n0 + n1 + n2);
+            }
+        }
+
+        // --- Seeded RNG helper (always yields values in [0,1)) ---
+        function makeRng(seedStr, salt = 0) {
+            let s = salt;
+            const str = String(seedStr);
+            for (let i = 0; i < str.length; i++) s = (Math.imul(s, 33) + str.charCodeAt(i)) | 0;
+            s = (Math.abs(s) % 233280) || 1337;
+            return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+        }
+
+        // --- Global Application State ---
+        const state = {
+            width: 256,
+            height: 256,
+            seed: 'POLYTERRA_2026',
+            algorithm: 'simplex',
+            scale: 1.0,
+            octaves: 5,
+            persistence: 0.5,
+            lacunarity: 2.0,
+            exponent: 1.2,
+            seaLevel: 0.40,
+            mask: 'circle',
+            erosion: true,
+            rivers: true,
+            propsDensity: 2,
+            smoothness: true,
+            palette: 'earth',
+            viewMode: '2d',
+            angle3D: 45,
+            pitch3D: 50,
+            height3D: 1.0,
+            drag3D: null,
+            brushMode: 'raise',
+            brushSize: 12,
+            brushStrength: 0.15,
+            elevation: [],
+            moistureMap: [],
+            temperatureMap: [],
+            originalElevation: [],
+            riversMap: [],
+            villagesMap: [],
+            customColors: {
+                waterDeep: [10, 34, 92],
+                waterShallow: [26, 96, 170],
+                sand: [212, 194, 130],
+                grass: [58, 138, 56],
+                forest: [28, 84, 35],
+                rock: [112, 112, 112],
+                snow: [255, 255, 255]
+            },
+            zoom: 1.0,
+            offsetX: 0,
+            offsetY: 0,
+            isMouseDown: false,
+            nation: {},
+            nationReroll: 0
+        };
+
+        // --- Color Palettes ---
+        const palettes = {
+            earth: [
+                { name: 'Abyssal Ocean', max: 0.20, color: [3, 22, 62] },
+                { name: 'Shallow Sea', max: 0.34, color: [50, 157, 190] },
+                { name: 'Sandy Beaches', max: 0.39, color: [226, 207, 157] },
+                { name: 'Hot Desert / Dunes', max: 0.48, color: [205, 164, 91] },
+                { name: 'Savanna / Dry Scrub', max: 0.57, color: [190, 181, 105] },
+                { name: 'Temperate Grassland', max: 0.65, color: [139, 174, 105] },
+                { name: 'Woodland', max: 0.73, color: [67, 139, 83] },
+                { name: 'Rainforest / Wetland', max: 0.80, color: [38, 119, 76] },
+                { name: 'Taiga / Tundra', max: 0.87, color: [126, 151, 139] },
+                { name: 'Alpine Rock', max: 0.94, color: [112, 112, 108] },
+                { name: 'Snow & Ice', max: 1.00, color: [250, 253, 255] }
+            ],
+            scifi: [
+                { name: 'Purple Void', max: 0.30, color: [25, 10, 50] },
+                { name: 'Neon Ocean', max: 0.40, color: [130, 0, 255] },
+                { name: 'Crystal Shore', max: 0.45, color: [0, 240, 255] },
+                { name: 'Xeno Turf', max: 0.65, color: [0, 255, 120] },
+                { name: 'Alien Taiga', max: 0.80, color: [200, 0, 150] },
+                { name: 'Peak Ridge', max: 1.00, color: [255, 220, 0] }
+            ],
+            desert: [
+                { name: 'Deep Oasis', max: 0.35, color: [10, 80, 100] },
+                { name: 'Shallow Pond', max: 0.40, color: [40, 140, 150] },
+                { name: 'Moist Oasis Sand', max: 0.45, color: [180, 160, 100] },
+                { name: 'Dune Sands', max: 0.70, color: [220, 170, 90] },
+                { name: 'Scorched Clay', max: 0.88, color: [170, 90, 40] },
+                { name: 'Mesa Peak', max: 1.00, color: [120, 50, 20] }
+            ],
+            volcanic: [
+                { name: 'Magma Sea', max: 0.38, color: [200, 20, 0] },
+                { name: 'Lava Flow', max: 0.42, color: [255, 100, 0] },
+                { name: 'Obsidian Shore', max: 0.48, color: [20, 20, 25] },
+                { name: 'Ash Plain', max: 0.70, color: [50, 50, 60] },
+                { name: 'Basalt Ridge', max: 0.88, color: [80, 80, 95] },
+                { name: 'Brimstone Peak', max: 1.00, color: [240, 230, 140] }
+            ],
+            cyber: [
+                { name: 'Cyber Void', max: 0.38, color: [9, 10, 15] },
+                { name: 'Cyan Grid', max: 0.42, color: [0, 240, 255] },
+                { name: 'Acid Green', max: 0.65, color: [0, 255, 102] },
+                { name: 'Magenta Ridge', max: 0.88, color: [255, 0, 127] },
+                { name: 'Neon Yellow', max: 1.00, color: [255, 230, 0] }
+            ],
+            retro: [
+                { name: '8bit Water', max: 0.40, color: [32, 40, 160] },
+                { name: '8bit Sand', max: 0.46, color: [224, 200, 128] },
+                { name: '8bit Field', max: 0.68, color: [64, 160, 48] },
+                { name: '8bit Mountain', max: 0.88, color: [128, 128, 128] },
+                { name: '8bit Peak', max: 1.00, color: [240, 240, 240] }
+            ],
+            paper: [
+                { name: 'Ink Sea', max: 0.40, color: [170, 190, 200] },
+                { name: 'Parchment Sand', max: 0.44, color: [235, 220, 185] },
+                { name: 'Plain Land', max: 0.70, color: [220, 205, 170] },
+                { name: 'Hills Ink', max: 0.88, color: [180, 160, 125] },
+                { name: 'Mountain Peak', max: 1.00, color: [130, 110, 85] }
+            ],
+            monochrome: [{ name: 'Grayscale', max: 1.0, color: [255, 255, 255] }],
+            thermal: [{ name: 'Thermal', max: 1.0, color: [255, 0, 0] }]
+        };
+
+        // Elevation at which each palette switches from water to land
+        const waterLines = { earth: 0.40, scifi: 0.40, desert: 0.40, volcanic: 0.42, cyber: 0.42, retro: 0.40, paper: 0.40 };
+        // Remap elevation so the Sea Level slider moves the shoreline of any palette
+        function paletteElev(e) {
+            const wl = waterLines[state.palette] || 0.40;
+            const sl = Math.max(0.01, Math.min(0.99, state.seaLevel));
+            return e <= sl ? (e / sl) * wl : wl + ((e - sl) / (1 - sl)) * (1 - wl);
+        }
+
+        const presets = {
+            archipelago: { algo: 'simplex', scale: 1.2, octaves: 5, persistence: 0.45, exponent: 1.3, seaLevel: 0.42, mask: 'circle', palette: 'earth' },
+            volcanic: { algo: 'simplex', scale: 0.9, octaves: 6, persistence: 0.60, exponent: 2.0, seaLevel: 0.38, mask: 'square', palette: 'volcanic' },
+            mountains: { algo: 'diamond', scale: 1.0, octaves: 6, persistence: 0.55, exponent: 1.8, seaLevel: 0.32, mask: 'none', palette: 'earth' },
+            desert: { algo: 'simplex', scale: 0.8, octaves: 4, persistence: 0.40, exponent: 1.0, seaLevel: 0.30, mask: 'border', palette: 'desert' },
+            scifi: { algo: 'voronoi', scale: 1.5, octaves: 5, persistence: 0.50, exponent: 1.4, seaLevel: 0.40, mask: 'circle', palette: 'scifi' },
+            paper: { algo: 'simplex', scale: 1.0, octaves: 5, persistence: 0.50, exponent: 1.2, seaLevel: 0.40, mask: 'border', palette: 'paper' },
+            cyber: { algo: 'simplex', scale: 1.3, octaves: 4, persistence: 0.45, exponent: 1.5, seaLevel: 0.40, mask: 'square', palette: 'cyber' },
+            caves: { algo: 'cellular', scale: 1.0, octaves: 3, persistence: 0.50, exponent: 1.0, seaLevel: 0.50, mask: 'none', palette: 'monochrome' }
+        };
+
+        const canvas = document.getElementById('terrainCanvas');
+        const ctx = canvas.getContext('2d');
+        const offscreenCanvas = document.createElement('canvas');
+        const offCtx = offscreenCanvas.getContext('2d');
+
+        // --- Initialization on Load ---
+        window.addEventListener('DOMContentLoaded', () => {
+            initUI();
+            generateTerrain();
+            setupCanvasEvents();
+            let resizeTimer;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => { resizeCanvasContainer(); renderCanvas(); }, 120);
+            });
+        });
+
+        function initUI() {
+            // Tab switching
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const target = btn.getAttribute('data-target');
+                    document.querySelectorAll('.tab-btn').forEach(b => {
+                        b.classList.remove('text-dusk-teal', 'border-b-2', 'border-dusk-teal', 'bg-night-800');
+                        b.classList.add('text-night-300');
+                    });
+                    btn.classList.add('text-dusk-teal', 'border-b-2', 'border-dusk-teal', 'bg-night-800');
+                    btn.classList.remove('text-night-300');
+
+                    document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+                    document.getElementById(target).classList.remove('hidden');
+                });
+            });
+
+            // Algorithm Buttons
+            document.querySelectorAll('.algo-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.algo-btn').forEach(b => {
+                        b.classList.remove('border-dusk-teal', 'text-dusk-teal');
+                        b.classList.add('border-night-700', 'text-night-300');
+                    });
+                    btn.classList.add('border-dusk-teal', 'text-dusk-teal');
+                    btn.classList.remove('border-night-700', 'text-night-300');
+                    state.algorithm = btn.getAttribute('data-algo');
+                    generateTerrain();
+                });
+            });
+
+            // View Modes
+            document.querySelectorAll('.view-mode-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.view-mode-btn').forEach(b => {
+                        b.classList.remove('bg-dusk-teal', 'text-black');
+                        b.classList.add('text-night-300');
+                    });
+                    btn.classList.add('bg-dusk-teal', 'text-black');
+                    btn.classList.remove('text-night-300');
+                    state.viewMode = btn.getAttribute('data-view');
+
+                    const angleCtrl = document.getElementById('angleControl3D');
+                    if (state.viewMode === '3d') angleCtrl.classList.remove('hidden');
+                    else angleCtrl.classList.add('hidden');
+
+                    renderCanvas();
+                });
+            });
+
+            // Brush Modes
+            document.querySelectorAll('.brush-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.brush-btn').forEach(b => {
+                        b.classList.remove('border-dusk-teal', 'text-dusk-teal', 'bg-dusk-teal/20');
+                        b.classList.add('border-night-700', 'text-night-300', 'bg-night-900');
+                    });
+                    btn.classList.add('border-dusk-teal', 'text-dusk-teal', 'bg-dusk-teal/20');
+                    btn.classList.remove('border-night-700', 'text-night-300', 'bg-night-900');
+                    state.brushMode = btn.getAttribute('data-mode');
+                });
+            });
+
+            // Sliders & Controls
+            bindSlider('scaleRange', 'val-scale', (v) => { state.scale = parseFloat(v); generateTerrain(); });
+            bindSlider('octavesRange', 'val-octaves', (v) => { state.octaves = parseInt(v); generateTerrain(); });
+            bindSlider('persistenceRange', 'val-persistence', (v) => { state.persistence = parseFloat(v); generateTerrain(); });
+            bindSlider('lacunarityRange', 'val-lacunarity', (v) => { state.lacunarity = parseFloat(v); generateTerrain(); });
+            bindSlider('exponentRange', 'val-exponent', (v) => { state.exponent = parseFloat(v); generateTerrain(); });
+            bindSlider('seaLevelRange', 'val-sealevel', (v) => { state.seaLevel = parseFloat(v); renderCanvas(); updateStats(); });
+            bindSlider('brushSizeRange', 'val-brush-size', (v) => { state.brushSize = parseInt(v); });
+            bindSlider('brushStrengthRange', 'val-brush-strength', (v) => { state.brushStrength = parseFloat(v); });
+            bindSlider('angle3DRange', null, (v) => { state.angle3D = parseInt(v); renderCanvas(); });
+            bindSlider('height3DRange', null, (v) => { state.height3D = parseFloat(v); renderCanvas(); });
+
+            document.getElementById('propsDensityRange').addEventListener('input', (e) => {
+                const labels = ['None', 'Low', 'Medium', 'High'];
+                state.propsDensity = parseInt(e.target.value);
+                document.getElementById('val-props').innerText = labels[state.propsDensity];
+                renderCanvas();
+            });
+
+            document.getElementById('mapSize').addEventListener('change', (e) => {
+                state.width = parseInt(e.target.value);
+                state.height = parseInt(e.target.value);
+                document.getElementById('resBadge').innerText = `${state.width} x ${state.height}`;
+                generateTerrain();
+            });
+
+            document.getElementById('smoothnessToggle').addEventListener('change', (e) => {
+                state.smoothness = e.target.checked;
+                canvas.className = state.smoothness ? 'shadow-2xl rounded-lg canvas-smooth' : 'shadow-2xl rounded-lg canvas-pixelated';
+                renderCanvas();
+            });
+
+            document.getElementById('maskSelect').addEventListener('change', (e) => { state.mask = e.target.value; generateTerrain(); });
+            document.getElementById('erosionToggle').addEventListener('change', (e) => { state.erosion = e.target.checked; generateTerrain(); });
+            document.getElementById('riversToggle').addEventListener('change', (e) => { state.rivers = e.target.checked; generateTerrain(); });
+
+            document.getElementById('paletteSelect').addEventListener('change', (e) => {
+                state.palette = e.target.value;
+                const customEd = document.getElementById('customPaletteEditor');
+                if (state.palette === 'custom') customEd.classList.remove('hidden');
+                else customEd.classList.add('hidden');
+                updatePaletteSwatches();
+                renderCanvas();
+            });
+
+            // Custom Color pickers
+            ['water-deep', 'water-shallow', 'sand', 'grass', 'forest', 'rock', 'snow'].forEach(key => {
+                const id = `col-${key}`;
+                document.getElementById(id).addEventListener('input', (e) => {
+                    const hex = e.target.value;
+                    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+                    const prop = key.replace(/-([a-z])/g, g => g[1].toUpperCase());
+                    state.customColors[prop] = [r, g, b];
+                    renderCanvas();
+                });
+            });
+
+            document.getElementById('presetSelect').addEventListener('change', (e) => {
+                const p = presets[e.target.value];
+                if (p) {
+                    state.algorithm = p.algo;
+                    state.scale = p.scale;
+                    state.octaves = p.octaves;
+                    state.persistence = p.persistence;
+                    state.exponent = p.exponent;
+                    state.seaLevel = p.seaLevel;
+                    state.mask = p.mask;
+                    state.palette = p.palette;
+
+                    document.getElementById('scaleRange').value = p.scale;
+                    document.getElementById('val-scale').innerText = p.scale;
+                    document.getElementById('octavesRange').value = p.octaves;
+                    document.getElementById('val-octaves').innerText = p.octaves;
+                    document.getElementById('persistenceRange').value = p.persistence;
+                    document.getElementById('val-persistence').innerText = p.persistence;
+                    document.getElementById('exponentRange').value = p.exponent;
+                    document.getElementById('val-exponent').innerText = p.exponent;
+                    document.getElementById('seaLevelRange').value = p.seaLevel;
+                    document.getElementById('val-sealevel').innerText = p.seaLevel;
+                    document.getElementById('maskSelect').value = p.mask;
+                    document.getElementById('paletteSelect').value = p.palette;
+                    document.getElementById('customPaletteEditor').classList.add('hidden');
+                    document.querySelectorAll('.algo-btn').forEach(b => {
+                        const on = b.getAttribute('data-algo') === p.algo;
+                        b.classList.toggle('border-dusk-teal', on);
+                        b.classList.toggle('text-dusk-teal', on);
+                        b.classList.toggle('border-night-700', !on);
+                        b.classList.toggle('text-night-300', !on);
+                    });
+                    updatePaletteSwatches();
+                    generateTerrain();
+                    showToast('Preset Loaded', `Applied '${e.target.value}' configuration.`);
+                }
+            });
+
+            document.getElementById('generateBtn').addEventListener('click', () => {
+                // a new map needs a new seed; the shuffle button does the same thing without the toast
+                const seed = 'SEED_' + Math.random().toString(36).substring(2, 8).toUpperCase();
+                document.getElementById('seedInput').value = seed;
+                state.seed = seed;
+                generateTerrain();
+                showToast('New map', `Seed: ${seed}`);
+            });
+            document.getElementById('randomSeedBtn').addEventListener('click', () => {
+                const rnd = 'SEED_' + Math.random().toString(36).substring(2, 8).toUpperCase();
+                document.getElementById('seedInput').value = rnd;
+                state.seed = rnd;
+                generateTerrain();
+            });
+            document.getElementById('seedApplyBtn').addEventListener('click', () => {
+                state.seed = document.getElementById('seedInput').value;
+                generateTerrain();
+                showToast('Seed Updated', `Seed: ${state.seed}`);
+            });
+
+            document.getElementById('rerollNationBtn').addEventListener('click', () => {
+                state.nationReroll = (state.nationReroll || 0) + 1;
+                generateFictionalNation();
+                showToast('Nation Re-Rolled', `Created new profile for ${state.nation.name}`);
+            });
+
+            document.getElementById('exportFactbookBtn').addEventListener('click', () => {
+                const n = state.nation;
+                const md = `[align=center][size=200][b]${n.fullName}[/b][/size]\n[i]“${n.motto}”[/i][/align]\n\n[hr]\n\n[size=150][b]State at a glance[/b][/size]\n[list]\n[*][b]Capital:[/b] ${n.capital}\n[*][b]Demonym:[/b] ${n.demonym}\n[*][b]Founded:[/b] ${n.founded}\n[*][b]Government:[/b] ${n.government}\n[*][b]Head of state:[/b] ${n.leader}\n[*][b]Official language:[/b] ${n.language}\n[*][b]Currency:[/b] ${n.currency}\n[*][b]Population:[/b] ${n.population}\n[*][b]Civil liberties:[/b] ${n.freedom} (${n.liberty}/100)\n[/list]\n\n[size=150][b]Economy[/b][/size]\n[list]\n[*][b]Economic model:[/b] ${n.economy}\n[*][b]Leading sector:[/b] ${n.industry}\n[/list]\n\n[size=150][b]Geography[/b][/size]\n${n.summary}\n\n${n.regions}\n\n[size=150][b]History[/b][/size]\n${n.history}\n\n${n.turningPoint}\n\n[size=150][b]Politics and society[/b][/size]\n[b]Political fault line:[/b] ${n.politics}\n\n[b]Social character:[/b] ${n.culture}\n\n[b]Foreign policy:[/b] ${n.foreign}\n\n[size=150][b]Government and policy[/b][/size]\n[b]Institutions:[/b] ${n.institutions}\n[b]Political stability:[/b] ${n.stabilityLabel} (${n.stability}/100)\n[b]Public services and welfare:[/b] ${n.welfare}/100\n[b]Economic regulation:[/b] ${n.regulation}/100\n[b]Regional autonomy:[/b] ${n.autonomy}/100\n[b]Environmental ambition:[/b] ${n.greenPolicy}/100\n${n.policySummary}\n\n[size=150][b]National culture[/b][/size]\n[list]\n[*][b]National animal:[/b] ${n.animal}\n[*][b]National dish:[/b] ${n.dish}\n[*][b]Major festival:[/b] ${n.festival}\n[*][b]Popular sport:[/b] ${n.sport}\n[/list]\n`;
+                copyToClipboard(md);
+                showToast('Factbook Copied', 'Complete nation profile copied as NationStates BBCode.');
+            });
+
+            document.getElementById('resetSculptBtn').addEventListener('click', () => {
+                state.elevation = state.originalElevation.map(r => new Float32Array(r));
+                renderCanvas();
+                updateStats();
+                showToast('Reset Sculpts', 'Reverted manual edits.');
+            });
+
+            // Exports
+            document.getElementById('downloadMapMainBtn').addEventListener('click', exportFullMapPNG);
+            document.getElementById('exportHeightmapBtn').addEventListener('click', exportHeightmapPNG);
+            document.getElementById('exportNormalMapBtn').addEventListener('click', exportNormalMapPNG);
+            document.getElementById('exportJsonBtn').addEventListener('click', exportJSONData);
+            document.getElementById('copySeedBtn').addEventListener('click', copySeedToClipboard);
+
+            // Code Snippets
+            document.getElementById('codeUnityBtn').addEventListener('click', (e) => {
+                e.target.className = 'flex-1 py-1.5 bg-dusk-teal text-black font-bold rounded text-xs';
+                document.getElementById('codeGodotBtn').className = 'flex-1 py-1.5 bg-night-700 text-night-200 hover:text-white rounded text-xs';
+                updateCodeSnippet('unity');
+            });
+            document.getElementById('codeGodotBtn').addEventListener('click', (e) => {
+                e.target.className = 'flex-1 py-1.5 bg-dusk-teal text-black font-bold rounded text-xs';
+                document.getElementById('codeUnityBtn').className = 'flex-1 py-1.5 bg-night-700 text-night-200 hover:text-white rounded text-xs';
+                updateCodeSnippet('godot');
+            });
+            document.getElementById('copyCodeSnippetBtn').addEventListener('click', () => {
+                const text = document.getElementById('codeDisplay').value;
+                copyToClipboard(text);
+                showToast('Copied', 'Code snippet copied to clipboard.');
+            });
+
+            // View Actions
+            document.getElementById('zoomInBtn').addEventListener('click', () => { state.zoom = Math.min(state.zoom * 1.25, 4.0); renderCanvas(); });
+            document.getElementById('zoomOutBtn').addEventListener('click', () => { state.zoom = Math.max(state.zoom / 1.25, 0.5); renderCanvas(); });
+            document.getElementById('centerViewBtn').addEventListener('click', () => { state.zoom = 1.0; state.offsetX = 0; state.offsetY = 0; state.angle3D = 45; state.pitch3D = 50; document.getElementById('angle3DRange').value = 45; renderCanvas(); });
+
+            document.getElementById('fullscreenBtn').addEventListener('click', () => {
+                if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+                else document.exitFullscreen();
+            });
+
+            updatePaletteSwatches();
+            updateCodeSnippet('unity');
+        }
+
+        function bindSlider(sliderId, labelId, callback) {
+            const slider = document.getElementById(sliderId);
+            slider.addEventListener('input', (e) => {
+                if (labelId) document.getElementById(labelId).innerText = e.target.value;
+                callback(e.target.value);
+            });
+        }
+
+        function updatePaletteSwatches() {
+            const container = document.getElementById('paletteSwatches');
+            container.innerHTML = '';
+            let colors = [];
+            if (state.palette === 'custom') {
+                colors = [
+                    { name: 'Deep Ocean', color: state.customColors.waterDeep },
+                    { name: 'Shallow Ocean', color: state.customColors.waterShallow },
+                    { name: 'Sand Beach', color: state.customColors.sand },
+                    { name: 'Grassland', color: state.customColors.grass },
+                    { name: 'Forest', color: state.customColors.forest },
+                    { name: 'Mountain', color: state.customColors.rock },
+                    { name: 'Snow Peak', color: state.customColors.snow }
+                ];
+            } else {
+                colors = palettes[state.palette];
+            }
+
+            colors.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between text-[11px] font-mono bg-night-800 px-2.5 py-1 rounded border border-night-700';
+                
+                const left = document.createElement('div');
+                left.className = 'flex items-center gap-2';
+                const dot = document.createElement('span');
+                dot.className = 'w-3 h-3 rounded-full border border-white/20';
+                dot.style.backgroundColor = `rgb(${item.color.join(',')})`;
+                left.appendChild(dot);
+                left.appendChild(document.createTextNode(item.name));
+
+                div.appendChild(left);
+                container.appendChild(div);
+            });
+        }
+
+        // --- Generation Pipeline ---
+        function generateTerrain() {
+            state.seed = document.getElementById('seedInput').value || 'POLYTERRA';
+            const w = state.width, h = state.height;
+            state.elevation = Array(h).fill(0).map(() => new Float32Array(w));
+            state.riversMap = Array(h).fill(0).map(() => new Uint8Array(w));
+            state.villagesMap = Array(h).fill(0).map(() => new Uint8Array(w));
+
+            if (state.algorithm === 'simplex') generateSimplexNoiseTerrain(w, h);
+            else if (state.algorithm === 'diamond') generateDiamondSquareTerrain(w, h);
+            else if (state.algorithm === 'cellular') generateCellularCaveTerrain(w, h);
+            else if (state.algorithm === 'voronoi') generateVoronoiTerrain(w, h);
+
+            if (state.algorithm !== 'cellular') robustNormalize(w, h);
+            applyMask(w, h);
+            // Re-stretch after masking so island centres still reach high elevations
+            let maxAfterMask = 0;
+            for (let y = 0; y < h; y++) {
+                const row = state.elevation[y];
+                for (let x = 0; x < w; x++) if (row[x] > maxAfterMask) maxAfterMask = row[x];
+            }
+            if (maxAfterMask > 0) {
+                for (let y = 0; y < h; y++) {
+                    const row = state.elevation[y];
+                    for (let x = 0; x < w; x++) row[x] /= maxAfterMask;
+                }
+            }
+
+            const exp = state.exponent;
+            for (let y = 0; y < h; y++) {
+                const row = state.elevation[y];
+                for (let x = 0; x < w; x++) {
+                    row[x] = Math.pow(row[x], exp);
+                }
+            }
+
+            if (state.algorithm !== 'cellular') {
+                // A soft height curve reduces isolated needle peaks while retaining valleys.
+                for (let y = 0; y < h; y++) {
+                    const row = state.elevation[y];
+                    for (let x = 0; x < w; x++) {
+                        const v = row[x];
+                        row[x] = 0.5 + (v - 0.5) * 0.86;
+                    }
+                }
+                polishTerrain(w, h);
+            }
+            if (state.erosion) applyErosionPass(w, h);
+            generateClimateMaps(w, h);
+            if (state.rivers) generateRivers(w, h);
+            generateVillages(w, h);
+
+            state.originalElevation = state.elevation.map(r => new Float32Array(r));
+            
+            // Generate Nation Profiles matching current terrain specs
+            generateFictionalNation();
+
+            resizeCanvasContainer();
+            renderCanvas();
+            updateStats();
+        }
+
+        // --- Fictional Country & NationStates Generator ---
+        function generateFictionalNation() {
+            const rng = makeRng(state.seed, 7919 + (state.nationReroll || 0) * 104729);
+            const pick = a => a[Math.floor(rng() * a.length)];
+            const int = (a,b) => Math.floor(rng() * (b-a+1)) + a;
+            const roots = ['Avar','Bel','Cyr','Dara','Esten','Ilyr','Kav','Leth','Maren','Nareth','Ordan','Pelor','Quorin','Ruvan','Sere','Tav','Ulden','Vey','Westr','Ysol'];
+            const endings = ['a','en','ia','or','eth','mere','ova','ane','esk','un','ara','holm'];
+            const name = pick(roots) + pick(endings);
+            const demonym = name.replace(/ia$/,'ian').replace(/a$/,'an');
+            const fullName = `The ${pick(['United','Free','Sovereign','Federal','People’s','Crowned','Coastal','Highland','River'])} ${pick(['Republic','Kingdom','Federation','Commonwealth','Union','Principality','Confederation','State'])} of ${name}`;
+            const terrain = state.palette === 'volcanic' ? 'volcanic' : state.palette === 'desert' ? 'arid' : ['cyber','scifi'].includes(state.palette) ? 'rugged' : 'temperate';
+            const landShare = state.elevation.length ? state.elevation.reduce((n,r)=>n+r.reduce((a,v)=>a+(v>state.seaLevel?1:0),0),0)/(state.width*state.height) : .55;
+            const population = `${Math.max(.2,Math.min(145,landShare*(rng()*75+12))).toFixed(1)} million`;
+            const capital = pick(['Avenport','Caldren','Demeris','Eldermouth','Fallowmere','Greyhaven','Istren','Kestrel Bay','Lornwick','Merrow','Northwatch','Orvale','Sableford','Ternholm','Veycross']);
+            const [government,leader] = pick([['Parliamentary republic','Prime Minister'],['Constitutional monarchy','Monarch and Prime Minister'],['Federal presidential republic','President'],['One-party state','Party Secretary'],['Council-led confederation','First Convenor'],['Military-led directorate','Director-General'],['Elective monarchy','Elected Sovereign'],['Parliamentary federation','Federal Chancellor'],['Dominant-party republic','President']]);
+            const isOneParty = government === 'One-party state';
+            const isMilitary = government === 'Military-led directorate';
+            const isFederal = government.includes('Federal') || government.includes('federation') || government.includes('confederation');
+            const isParliamentary = government.includes('Parliamentary') || government.includes('Constitutional monarchy');
+            const economy = pick(['Export-led mixed economy','Social market economy','State-coordinated industrial economy','Resource-backed welfare economy','Service-led open economy','Cooperative regional economy']);
+            const language = pick(['Avaric','Old Marenic','Bellic','Low Veyran','Tavrian','Ordanic','Serevan','Coastal Trade Speech','Highland Common']);
+            const animals = terrain==='arid'?['sand fox','steppe bustard','dune gazelle','caracal']:terrain==='volcanic'?['ash raven','basalt ibex','ember salamander','black kite']:terrain==='rugged'?['cliff eagle','mountain lynx','red deer','snow hare']:['marsh crane','river otter','red fox','white stork','wild boar'];
+            const industries = terrain==='arid'?['solar energy and mineral processing','dryland agriculture','long-distance logistics','ceramics and glassmaking']:terrain==='volcanic'?['geothermal power','specialist metals','volcanic stone and ceramics','resilient engineering']:terrain==='rugged'?['hydroelectricity and engineering','timber and precision crafts','mineral extraction','mountain tourism']:['advanced manufacturing','food processing and agriculture','river trade and logistics','pharmaceuticals and research'];
+            const founded=int(1120,1988);
+            // Scores share causes: political structure shapes liberties and autonomy;
+            // economic model shapes welfare/regulation; stability responds to both.
+            const liberty = isOneParty ? int(12,38) : isMilitary ? int(8,30) : int(42,94);
+            const autonomy = isFederal ? int(62,94) : isOneParty || isMilitary ? int(8,42) : int(24,72);
+            const welfareBase = economy.includes('welfare') || economy.includes('Social') || economy.includes('Cooperative') ? int(62,92) : economy.includes('State-coordinated') ? int(48,82) : int(22,68);
+            const regulationBase = economy.includes('State-coordinated') || economy.includes('Cooperative') || economy.includes('Social') ? int(62,94) : economy.includes('Export-led') ? int(38,78) : int(18,62);
+            const welfare = Math.max(12,Math.min(98,welfareBase + (regulationBase>72?int(0,8):int(-8,5))));
+            const regulation = regulationBase;
+            const greenPolicy = Math.max(12,Math.min(98,int(25,88) + (terrain==='volcanic'?8:terrain==='arid'?5:0) - (economy.includes('Resource-backed')?12:0)));
+            const stability = Math.max(12,Math.min(96,Math.round(int(38,76) + (liberty>60?8:liberty<25?-9:0) + (autonomy>70&&isFederal?7:0) + (isMilitary? -8:0) + (welfare>70?4:0))));
+            const regions = terrain==='arid'
+                ? 'The settled belt follows a chain of wells and seasonal rivers. The dry interior is sparsely populated, and disputes over water rights shape local politics.'
+                : terrain==='volcanic'
+                ? 'Communities cluster on older lava terraces and sheltered coastal shelves. Building codes, evacuation planning and access to geothermal infrastructure are national political issues.'
+                : terrain==='rugged'
+                ? 'The upland districts retain strong local identities, while the lower valleys contain most large towns and transport links. Passes and winter weather still shape movement across the country.'
+                : 'The population is concentrated around navigable rivers, productive lowlands and older port towns. Rural counties remain politically influential despite the growth of the metropolitan corridor.';
+            const history = `${name} emerged as a recognised state in ${founded}, after ${pick(['a pact between rival river towns','the collapse of a dynastic union','a long campaign for self-government','the unification of coastal provinces','a negotiated settlement between regional assemblies','the end of foreign administration'])}. Its early institutions were shaped by ${pick(['merchant councils','landowning provincial families','frontier militias','religious and civic assemblies','industrial guilds','a coalition of reformers'])}, leaving a political legacy that still influences public life.`;
+            const turningPoint = `A defining modern turning point came in ${int(Math.max(founded+20,1850),2022)} with ${pick(['a constitutional crisis that redistributed power to the provinces','a banking collapse that transformed the welfare system','a bitter industrial dispute that created national labour protections','a border settlement that redirected trade','a popular reform movement that widened the franchise','a severe drought that forced a new national water compact'])}. Its consequences remain debated.`;
+            const politics = isOneParty
+                ? pick([
+                    'Formal political competition is confined to the ruling party. Real debate takes place between internal factions: gradual reformers, security-minded officials and provincial organisers. They bargain over appointments and policy, but do not form a multiparty governing coalition.',
+                    'The ruling party presents a unified public front, while its internal committees contain competing economic and regional blocs. Leadership succession and control of the party congress are the main arenas for political negotiation.',
+                    'Policy is negotiated through party congresses and senior committees rather than competitive national elections. Reformists favour limited local experimentation; centralisers fear that loosening control could weaken the state.'
+                  ])
+                : isMilitary
+                ? pick([
+                    'Decision-making is concentrated in the security leadership. Differences tend to surface between officers prioritising order, technocrats seeking economic growth and local commanders concerned with regional pressures; these are elite divisions, not parliamentary coalitions.',
+                    'The directorate maintains authority through the security apparatus and appointed administrators. Its main internal tension is between hardliners and officials who argue that carefully managed civilian institutions would improve legitimacy.'
+                  ])
+                : government === 'Dominant-party republic'
+                ? pick([
+                    'One party has dominated elections for years, but opposition parties remain legal. The governing party balances reformers, labour interests and regional organisers, while opposition groups challenge it on transparency and public services.',
+                    'The ruling party usually wins a legislative majority, yet must still manage parliamentary dissent, local elections and pressure from legal opposition parties. Its internal factions compete over the party programme.'
+                  ])
+                : pick([
+                    'The central argument is over how much authority should sit in the capital. Provincial leaders want control over land, schools and infrastructure; national ministries argue that shared standards prevent poorer districts being left behind.',
+                    'Politics is divided between an export-minded business bloc and a labour movement seeking stronger wage protections. Parties negotiate over budgets and labour rules, making coalition agreements possible but uneasy.',
+                    'A generational divide runs through public life: older voters prioritise stability and sovereignty, while younger urban voters push for transparency, housing reform and a more open society.',
+                    'The governing coalition depends on a compromise between rural constituencies and the metropolitan belt. It is durable, but budgets and transport policy regularly test it.'
+                  ]);
+            const culture = pick([
+                `Public life places high value on local associations, seasonal festivals and the shared meal. The national language, ${language}, has several regional accents and a strong tradition of oral storytelling.`,
+                'A practical civic culture has grown around trade, apprenticeship and neighbourhood clubs. National celebrations are local in character, with each region contributing its own music and food.',
+                'The country’s identity is less uniform than its flag suggests. Regional languages and customs remain visible, and national broadcasters routinely debate whose history is represented in public spaces.'
+            ]);
+            const foreign = pick([
+                'Its diplomacy favours commercial treaties and cautious neutrality; leaders are wary of becoming dependent on any single trading partner.',
+                'It is an active regional mediator, using port access, technical expertise and development loans to maintain influence beyond its modest size.',
+                'Foreign policy is shaped by strategic self-reliance. The state welcomes investment but protects key infrastructure and watches nearby shipping routes.',
+                'It seeks influence through education, scientific exchange and regional institutions rather than military power.'
+            ]);
+            const institutions = isOneParty
+                ? 'The ruling party sits above the state administration and sets the national programme. A legislature and courts may exist, but senior party committees control candidate selection and strategic decisions; internal party rules are more influential than electoral competition.'
+                : isMilitary
+                ? 'The directorate governs through a senior command council and appointed civilian administrators. Courts and an assembly may handle routine matters, but security leaders retain final authority over national policy and political organisation.'
+                : government.includes('monarchy')
+                ? 'The Crown is the ceremonial centre of the state, while day-to-day government is led by ministers answerable to an elected legislature. Courts interpret a written constitution, although arguments continue over the limits of royal reserve powers.'
+                : government.includes('republic') || government.includes('federation')
+                ? 'Executive authority is defined by a written constitution and checked by a legislature and an independent court system. Parliamentary committees oversee spending, while local councils administer services under national law.'
+                : government.includes('confederation')
+                ? 'The national council coordinates shared matters, but constituent districts retain substantial control over taxation, education and local law. Major constitutional changes require agreement across the country’s assemblies.'
+                : government.includes('monarchy')
+                ? 'The sovereign shares authority with appointed ministers and a representative assembly. The balance between inherited institutions and elected oversight remains a recurring constitutional question.'
+                : 'The executive is highly centralised, with national institutions setting policy and local administrations implementing it. Formal oversight exists, but its independence and practical influence are contested.';
+            const stabilityLabel = stability>78?'Very stable':stability>60?'Generally stable':stability>40?'Uneasy balance':'Fragile';
+            const stabilityDetail = stability>78?'Institutions are widely accepted and leadership changes or internal transitions are orderly.':stability>60?'The system functions reliably, although political disputes can delay reform.':stability>40?'Competing factions, economic pressures or unresolved grievances periodically disrupt government.':'Public trust is low and the governing system faces persistent pressure.';
+            const policySummary = `The policy mix reflects the country's ${economy.toLowerCase()}: ${welfare>70?'broad public provision':welfare>42?'targeted public services':'a leaner welfare system'} is funded and administered alongside ${regulation>70?'close state oversight':regulation>42?'selective regulation':'relatively light market rules'}. ${autonomy>68?'Regional governments have meaningful room to adapt these policies locally.':autonomy<35?'Most major policy decisions are set centrally, leaving local authorities limited discretion.':'National standards are combined with some local flexibility.'} ${greenPolicy>70?'Environmental investment is a prominent national priority.':greenPolicy<35?'Environmental rules are often weighed against short-term growth and employment.':'Environmental policy is advancing gradually, with disputes over cost and pace.'}`;
+            const freedom = liberty>78?'Open democracy':liberty>60?'Competitive but imperfect democracy':liberty>42?'Restricted pluralism':liberty>25?'Managed political system':'Authoritarian state';
+            const summary = `${fullName} is one sovereign nation occupying this landmass, with approximately ${population} residents. Its settlement pattern, economy and political priorities are closely tied to its physical landscape; the regional differences described below are internal to the same country.`;
+            const n = {
+                name,demonym,fullName,capital,government,leader,language,founded,liberty,freedom,population,terrain,
+                motto:pick(['Many shores, one home','The future is built together','By patience, we endure','No valley stands alone','A common measure of justice','From the land, our strength']),
+                currency:`${name} ${pick(['crown','mark','sol','lira','florin','dinar','tal','krona','escudo'])} (${name.slice(0,3).toUpperCase()})`,
+                animal:pick(animals),industry:pick(industries),
+                economy,
+                summary,regions,history,turningPoint,politics,culture,foreign,institutions,stability,stabilityLabel,stabilityDetail,welfare,regulation,autonomy,greenPolicy,policySummary,
+                dish:pick(['smoked river fish with barley','pepper-roasted root vegetables','saffron lentil stew','charcoal flatbread and herb cheese','slow-cooked mountain beans','salt-baked coastal vegetables']),
+                festival:pick(['Founders’ Week','The First Thaw','Harbour Lights','Harvest Reckoning','River Lanterns','Day of the Charter']),
+                sport:pick(['rowing','field hockey','wrestling','distance running','ice sailing','street football','sailing'])
+            };
+            n.people = `${demonym}s`;
+            state.nation = n;
+            drawNationFlag(n);
+            const put=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
+            Object.entries({
+                natFullName:n.fullName,natDemonym:n.demonym,natFounded:String(n.founded),natCapital:n.capital,natGov:n.government,
+                natLeader:n.leader,natMotto:`“${n.motto}”`,natCurrency:n.currency,natLanguage:n.language,natPop:n.population,
+                natAnimal:n.animal,natIndustry:n.industry,natEconomy:n.economy,natFreedom:n.freedom,natSummary:n.summary,
+                natRegions:n.regions,natHistory:n.history,natTurningPoint:n.turningPoint,natPolitics:n.politics,natCulture:n.culture,
+                natForeign:n.foreign,natInstitutions:n.institutions,natStabilityLabel:n.stabilityLabel,natStabilityDetail:n.stabilityDetail,natPolicySummary:n.policySummary,natWelfareValue:n.welfare+'/100',natRegulationValue:n.regulation+'/100',natAutonomyValue:n.autonomy+'/100',natGreenValue:n.greenPolicy+'/100',natDish:n.dish,natFestival:n.festival,natSport:n.sport,natPeople:n.people
+            }).forEach(([id,v])=>put(id,v));
+            const bar=document.getElementById('natLibertyBar');
+            if(bar){bar.style.width=liberty+'%';bar.className='h-full rounded-full '+(liberty>60?'bg-dusk-moss':liberty>35?'bg-dusk-gold':'bg-dusk-coral');}
+            const setMeter=(id,value)=>{const el=document.getElementById(id);if(el)el.style.width=value+'%';};
+            setMeter('natStabilityBar',stability);setMeter('natWelfareBar',welfare);setMeter('natRegulationBar',regulation);setMeter('natAutonomyBar',autonomy);setMeter('natGreenBar',greenPolicy);
+        }
+
+        // Procedural flag. Seeded like the lore, so it changes with the seed and Re-Roll Lore.
+        // It is display-only: it isn't part of state.nation, so the factbook copy never includes it.
+        function drawNationFlag(n) {
+            const host = document.getElementById('natFlag');
+            if (!host) return;
+            const rng = makeRng(state.seed, 2468 + (state.nationReroll || 0) * 7919);
+            const pick = a => a[Math.floor(rng() * a.length)];
+            const C = { red:'#c23a32', crimson:'#8f1f33', blue:'#2554a6', navy:'#16295e', sky:'#4f9bd6', green:'#2f7d52',
+                        teal:'#1e8a8a', gold:'#efc03c', orange:'#e07a2e', white:'#f6f3ea', black:'#1c1c22', purple:'#5b3b8c' };
+            const A = pick(['red','crimson','blue','navy','sky','green','teal','orange','purple','black']);
+            const B = pick(Object.keys(C).filter(k => k !== A && k !== 'white' && k !== 'gold' && k !== 'sky' || (k === 'sky' && A !== 'blue' && A !== 'navy')).filter(k => k !== A));
+            const L = pick(['white', 'gold']);                 // light accent
+            const a = C[A], b = C[B], l = C[L];
+            const W = 300, H = 200;
+            const star = (cx, cy, R, fill, pts = 5) => {
+                const r = R * (pts === 5 ? 0.4 : 0.55), d = [];
+                for (let i = 0; i < pts * 2; i++) {
+                    const ang = -Math.PI / 2 + i * Math.PI / pts, rad = i % 2 ? r : R;
+                    d.push((cx + Math.cos(ang) * rad).toFixed(1) + ',' + (cy + Math.sin(ang) * rad).toFixed(1));
+                }
+                return `<polygon points="${d.join(' ')}" fill="${fill}"/>`;
+            };
+            const emblems = [
+                (x, y, s, f) => star(x, y, s, f, 5),
+                (x, y, s, f) => star(x, y, s, f, 8),
+                (x, y, s, f) => `<circle cx="${x}" cy="${y}" r="${s * 0.8}" fill="${f}"/>`,
+                (x, y, s, f) => `<polygon points="${x},${y - s} ${x + s},${y} ${x},${y + s} ${x - s},${y}" fill="${f}"/>`,
+                (x, y, s, f) => `<polygon points="${x - s},${y + s * 0.7} ${x - s * 0.25},${y - s * 0.6} ${x + s * 0.2},${y + s * 0.1} ${x + s * 0.5},${y - s * 0.2} ${x + s},${y + s * 0.7}" fill="${f}"/>`
+            ];
+            const emblem = pick(emblems);
+            let g = '';
+            switch (pick(['hbands', 'vbands', 'nordic', 'saltire', 'split', 'disc', 'hoist', 'canton', 'border', 'sunrise'])) {
+                case 'hbands':
+                    g = `<rect width="${W}" height="${H}" fill="${a}"/><rect y="${H / 3}" width="${W}" height="${H / 3}" fill="${l}"/><rect y="${H * 2 / 3}" width="${W}" height="${H / 3}" fill="${b}"/>`
+                      + (rng() < 0.6 ? emblem(W / 2, H / 2, 26, a) : '');
+                    break;
+                case 'vbands':
+                    g = `<rect width="${W}" height="${H}" fill="${a}"/><rect x="${W / 3}" width="${W / 3}" height="${H}" fill="${l}"/><rect x="${W * 2 / 3}" width="${W / 3}" height="${H}" fill="${b}"/>`
+                      + (rng() < 0.6 ? emblem(W / 2, H / 2, 26, b) : '');
+                    break;
+                case 'nordic':
+                    g = `<rect width="${W}" height="${H}" fill="${a}"/><rect x="82" width="46" height="${H}" fill="${l}"/><rect y="77" width="${W}" height="46" fill="${l}"/>`
+                      + `<rect x="94" width="22" height="${H}" fill="${b}"/><rect y="89" width="${W}" height="22" fill="${b}"/>`;
+                    break;
+                case 'saltire':
+                    g = `<rect width="${W}" height="${H}" fill="${a}"/><path d="M0,0 L${W},${H} M${W},0 L0,${H}" stroke="${l}" stroke-width="44"/>`
+                      + `<path d="M0,0 L${W},${H} M${W},0 L0,${H}" stroke="${b}" stroke-width="16"/>`;
+                    break;
+                case 'split':
+                    g = `<rect width="${W}" height="${H}" fill="${a}"/><polygon points="${W},0 ${W},${H} 0,${H}" fill="${b}"/>`
+                      + `<path d="M${W},0 L0,${H}" stroke="${l}" stroke-width="20"/>`;
+                    break;
+                case 'disc':
+                    g = `<rect width="${W}" height="${H}" fill="${a}"/><circle cx="${W / 2}" cy="${H / 2}" r="62" fill="${l}"/><circle cx="${W / 2}" cy="${H / 2}" r="40" fill="${b}"/>`;
+                    break;
+                case 'hoist':
+                    g = `<rect width="${W}" height="${H / 2}" fill="${a}"/><rect y="${H / 2}" width="${W}" height="${H / 2}" fill="${b}"/>`
+                      + `<polygon points="0,0 ${W * 0.46},${H / 2} 0,${H}" fill="${l}"/>` + emblem(W * 0.14, H / 2, 24, a);
+                    break;
+                case 'canton':
+                    g = `<rect width="${W}" height="${H}" fill="${a}"/>`;
+                    for (let i = 1; i < 6; i += 2) g += `<rect y="${i * H / 6}" width="${W}" height="${H / 6}" fill="${l}"/>`;
+                    g += `<rect width="${W * 0.46}" height="${H * 0.5}" fill="${b}"/>` + emblem(W * 0.23, H * 0.25, 28, l);
+                    break;
+                case 'border':
+                    g = `<rect width="${W}" height="${H}" fill="${b}"/><rect x="18" y="18" width="${W - 36}" height="${H - 36}" fill="${a}"/>` + emblem(W / 2, H / 2, 38, l);
+                    break;
+                default: { // sun rising from the bottom edge
+                    g = `<rect width="${W}" height="${H}" fill="${a}"/>`;
+                    for (let i = 0; i < 12; i += 2) {
+                        const t0 = -Math.PI + i * Math.PI / 12, t1 = t0 + Math.PI / 12, R = 340;
+                        g += `<polygon points="${W / 2},${H} ${(W / 2 + Math.cos(t0) * R).toFixed(1)},${(H + Math.sin(t0) * R).toFixed(1)} ${(W / 2 + Math.cos(t1) * R).toFixed(1)},${(H + Math.sin(t1) * R).toFixed(1)}" fill="${b}"/>`;
+                    }
+                    g += `<circle cx="${W / 2}" cy="${H}" r="46" fill="${l}"/>`;
+                }
+            }
+            host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="block w-full h-auto" role="img" aria-label="Flag of ${n.name}">`
+                + g
+                + `<defs><linearGradient id="flagSheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient></defs>`
+                + `<rect width="${W}" height="${H}" fill="url(#flagSheen)"/></svg>`;
+        }
+
+        function generateSimplexNoiseTerrain(w, h) {
+            // Build a high-quality source field at a bounded working resolution, then
+            // bilinearly upscale it. 2048px exports therefore avoid millions of
+            // redundant high-octave simplex evaluations while retaining smooth detail.
+            const noise = new FastSimplexNoise(state.seed);
+            const cap = 768;
+            const sw = Math.min(w, cap), sh = Math.min(h, cap);
+            const base = new Float32Array(sw * sh);
+            const scale = state.scale;
+            const octaves = Math.max(3, Math.min(7, state.octaves));
+            const persistence = state.persistence;
+            const lacunarity = state.lacunarity;
+            const warp = new FastSimplexNoise(state.seed + '_warp');
+            let minV = Infinity, maxV = -Infinity;
+
+            for (let y = 0; y < sh; y++) {
+                const v = y / Math.max(1, sh - 1);
+                for (let x = 0; x < sw; x++) {
+                    const u = x / Math.max(1, sw - 1);
+                    const wx = warp.noise2D(u * 2.1 + 17.3, v * 2.1 - 8.2) * 0.10;
+                    const wy = warp.noise2D(u * 2.1 - 4.7, v * 2.1 + 21.1) * 0.10;
+                    let amp = 1, freq = 1.65 * scale, sum = 0, norm = 0;
+                    for (let o = 0; o < octaves; o++) {
+                        const n = noise.noise2D((u + wx) * freq, (v + wy) * freq);
+                        const ridge = 1 - Math.abs(n);
+                        // Broad continental masses + softer detail + sharp, branching ridges.
+                        const contribution = o === 0 ? n * 0.78 : (o < 3 ? n * 0.78 + (ridge - 0.5) * 0.10 : n * 0.84 + (ridge - 0.5) * 0.08);
+                        sum += contribution * amp;
+                        norm += amp;
+                        amp *= persistence;
+                        freq *= lacunarity;
+                    }
+                    let value = sum / norm;
+                    // Lift the middle elevations slightly to create broad plateaus and valleys.
+                    value = Math.sign(value) * Math.pow(Math.abs(value), 0.88);
+                    base[y * sw + x] = value;
+                    if (value < minV) minV = value;
+                    if (value > maxV) maxV = value;
+                }
+            }
+            const range = maxV - minV || 1;
+            for (let i = 0; i < base.length; i++) base[i] = (base[i] - minV) / range;
+
+            // Upscale into the requested matrix with bilinear interpolation.
+            for (let y = 0; y < h; y++) {
+                const gy = (y / Math.max(1, h - 1)) * (sh - 1);
+                const y0 = Math.floor(gy), y1 = Math.min(sh - 1, y0 + 1), fy = gy - y0;
+                const dest = state.elevation[y];
+                for (let x = 0; x < w; x++) {
+                    const gx = (x / Math.max(1, w - 1)) * (sw - 1);
+                    const x0 = Math.floor(gx), x1 = Math.min(sw - 1, x0 + 1), fx = gx - x0;
+                    const a = base[y0 * sw + x0], b = base[y0 * sw + x1];
+                    const c = base[y1 * sw + x0], d = base[y1 * sw + x1];
+                    dest[x] = (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+                }
+            }
+        }
+
+        function generateClimateMaps(w, h) {
+            // Climate is calculated on a small deterministic grid and upscaled; it is
+            // independent of rendering resolution and adds negligible generation cost.
+            const noise = new FastSimplexNoise(state.seed + '_climate');
+            const cw = Math.min(w, 320), ch = Math.min(h, 320);
+            const moist = new Float32Array(cw * ch), temp = new Float32Array(cw * ch);
+            for (let y = 0; y < ch; y++) {
+                const lat = Math.abs((y / Math.max(1, ch - 1)) * 2 - 1);
+                for (let x = 0; x < cw; x++) {
+                    const u = x / Math.max(1, cw - 1), v = y / Math.max(1, ch - 1);
+                    const m = noise.noise2D(u * 4.2 + 31, v * 4.2 - 13) * 0.65 + noise.noise2D(u * 10.5, v * 10.5) * 0.35;
+                    const t = noise.noise2D(u * 2.3 - 19, v * 2.3 + 7) * 0.16;
+                    moist[y * cw + x] = Math.max(0, Math.min(1, 0.5 + m * 0.5));
+                    temp[y * cw + x] = Math.max(0, Math.min(1, 1 - lat * 0.78 + t));
+                }
+            }
+            state.moistureMap = Array(h);
+            state.temperatureMap = Array(h);
+            for (let y = 0; y < h; y++) {
+                const gy = (y / Math.max(1, h - 1)) * (ch - 1), y0 = Math.floor(gy), y1 = Math.min(ch - 1, y0 + 1), fy = gy - y0;
+                const mr = new Float32Array(w), tr = new Float32Array(w);
+                for (let x = 0; x < w; x++) {
+                    const gx = (x / Math.max(1, w - 1)) * (cw - 1), x0 = Math.floor(gx), x1 = Math.min(cw - 1, x0 + 1), fx = gx - x0;
+                    const i00 = y0 * cw + x0, i01 = y0 * cw + x1, i10 = y1 * cw + x0, i11 = y1 * cw + x1;
+                    mr[x] = (moist[i00] + (moist[i01] - moist[i00]) * fx) * (1 - fy) + (moist[i10] + (moist[i11] - moist[i10]) * fx) * fy;
+                    tr[x] = (temp[i00] + (temp[i01] - temp[i00]) * fx) * (1 - fy) + (temp[i10] + (temp[i11] - temp[i10]) * fx) * fy;
+                }
+                state.moistureMap[y] = mr;
+                state.temperatureMap[y] = tr;
+            }
+        }
+
+        function mixBiomeColor(a, b, t) {
+            t = Math.max(0, Math.min(1, t));
+            return [0,1,2].map(i => Math.round(a[i] + (b[i] - a[i]) * t));
+        }
+
+        function getEarthBiomeColor(x, y, elev) {
+            const sea = state.seaLevel;
+            const moisture = state.moistureMap[y]?.[x] ?? 0.5;
+            const temperature = state.temperatureMap[y]?.[x] ?? 0.6;
+            const smooth = (a, b, v) => {
+                const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
+                return t * t * (3 - 2 * t);
+            };
+            const blend = (a, b, t) => mixBiomeColor(a, b, t);
+            if (elev <= sea) {
+                const d = Math.max(0, Math.min(1, elev / Math.max(0.001, sea)));
+                return blend([5,25,66], [93,181,197], smooth(0.02, 1, d));
+            }
+
+            const h = Math.max(0, Math.min(1, (elev - sea) / Math.max(0.001, 1 - sea)));
+            const beach = [224,207,157], dry = [190,169,112], grass = [151,177,111];
+            const woodland = [91,151,103], forest = [47,119,82], cool = [117,151,137];
+            const rock = [133,132,123], snow = [239,243,239];
+
+            // Climate blends continuously, so biome borders become broad natural transitions.
+            let low = blend(dry, grass, smooth(0.18, 0.58, moisture));
+            low = blend(low, [151,164,105], smooth(0.58, 0.82, temperature) * 0.48);
+            let mid = blend(grass, woodland, smooth(0.28, 0.68, moisture));
+            mid = blend(mid, forest, smooth(0.58, 0.88, moisture) * smooth(0.28, 0.68, temperature));
+            mid = blend(mid, cool, smooth(0.52, 0.18, temperature));
+            let color = blend(low, mid, smooth(0.08, 0.28, h));
+            color = blend(color, beach, 1 - smooth(0.012, 0.055, h) * 0.78);
+            color = blend(color, rock, smooth(0.62, 0.84, h) * 0.88);
+            color = blend(color, snow, smooth(0.84, 0.99, h) * (0.35 + temperature * 0.35));
+            return color;
+        }
+
+        function generateDiamondSquareTerrain(w, h) {
+            const size = 257;
+            let grid = Array(size).fill(0).map(() => new Float32Array(size));
+            const rng = makeRng(state.seed, 1337);
+
+            grid[0][0] = rng(); grid[0][size-1] = rng();
+            grid[size-1][0] = rng(); grid[size-1][size-1] = rng();
+
+            let step = size - 1, scale = 1.0;
+            while (step > 1) {
+                const half = step / 2;
+                for (let y = half; y < size; y += step) {
+                    for (let x = half; x < size; x += step) {
+                        const avg = (grid[y-half][x-half] + grid[y-half][x+half] + grid[y+half][x-half] + grid[y+half][x+half]) * 0.25;
+                        grid[y][x] = avg + (rng() * 2 - 1) * scale;
+                    }
+                }
+                for (let y = 0; y < size; y += half) {
+                    for (let x = (y + half) % step; x < size; x += step) {
+                        let sum = 0, count = 0;
+                        if (x >= half) { sum += grid[y][x-half]; count++; }
+                        if (x + half < size) { sum += grid[y][x+half]; count++; }
+                        if (y >= half) { sum += grid[y-half][x]; count++; }
+                        if (y + half < size) { sum += grid[y+half][x]; count++; }
+                        grid[y][x] = (sum / count) + (rng() * 2 - 1) * scale;
+                    }
+                }
+                step /= 2;
+                scale *= state.persistence;
+            }
+
+            let minVal = Infinity, maxVal = -Infinity;
+            for (let y = 0; y < h; y++) {
+                const dest = state.elevation[y];
+                const gy = Math.floor((y / h) * (size - 1));
+                const gridRow = grid[gy];
+                for (let x = 0; x < w; x++) {
+                    const gx = Math.floor((x / w) * (size - 1));
+                    const v = gridRow[gx];
+                    dest[x] = v;
+                    if (v < minVal) minVal = v;
+                    if (v > maxVal) maxVal = v;
+                }
+            }
+            const range = maxVal - minVal || 1;
+            for (let y = 0; y < h; y++) {
+                const dest = state.elevation[y];
+                for (let x = 0; x < w; x++) {
+                    dest[x] = (dest[x] - minVal) / range;
+                }
+            }
+        }
+
+        function generateCellularCaveTerrain(w, h) {
+            const rng = makeRng(state.seed, 555);
+
+            let map = Array(h).fill(0).map(() => new Float32Array(w));
+            for (let y = 0; y < h; y++) {
+                const row = map[y];
+                for (let x = 0; x < w; x++) row[x] = rng() < 0.48 ? 1.0 : 0.0;
+            }
+
+            for (let step = 0; step < 4; step++) {
+                let nMap = Array(h).fill(0).map(() => new Float32Array(w));
+                for (let y = 0; y < h; y++) {
+                    const nRow = nMap[y];
+                    for (let x = 0; x < w; x++) {
+                        let count = 0;
+                        for (let dy = -1; dy <= 1; dy++) {
+                            const ny = y + dy;
+                            if (ny < 0 || ny >= h) continue;
+                            const mapRow = map[ny];
+                            for (let dx = -1; dx <= 1; dx++) {
+                                const nx = x + dx;
+                                if (nx >= 0 && nx < w && mapRow[nx] > 0.5) count++;
+                            }
+                        }
+                        nRow[x] = count >= 5 ? 0.85 : 0.25;
+                    }
+                }
+                map = nMap;
+            }
+            state.elevation = map;
+        }
+
+        function generateVoronoiTerrain(w, h) {
+            const rng = makeRng(state.seed, 999);
+            const noise = new FastSimplexNoise(state.seed + '_vor');
+
+            const count = 25;
+            const pts = [];
+            for (let i = 0; i < count; i++) pts.push({ x: rng() * w, y: rng() * h });
+            const radius = 0.9 * Math.sqrt((w * h) / count);
+
+            for (let y = 0; y < h; y++) {
+                const dest = state.elevation[y];
+                for (let x = 0; x < w; x++) {
+                    let d1 = Infinity;
+                    for (let p of pts) {
+                        const dx = x - p.x, dy = y - p.y;
+                        const d = dx * dx + dy * dy;
+                        if (d < d1) d1 = d;
+                    }
+                    d1 = Math.sqrt(d1);
+                    // Wobble the coastline with noise so islands aren't perfect circles
+                    const wobble = 0.75 + 0.5 * ((noise.noise2D((x / w) * 6 * state.scale, (y / h) * 6 * state.scale) + 1) * 0.5);
+                    const v = 1 - Math.min(1, (d1 * wobble) / radius);
+                    dest[x] = v * v * (3 - 2 * v); // smoothstep
+                }
+            }
+        }
+
+        // Stretch heights to 0..1 using the 1st/99th percentile so outliers can't flatten the map
+        function robustNormalize(w, h) {
+            const samples = [];
+            const stepS = Math.max(1, Math.floor(Math.sqrt((w * h) / 40000)));
+            for (let y = 0; y < h; y += stepS) {
+                const row = state.elevation[y];
+                for (let x = 0; x < w; x += stepS) samples.push(row[x]);
+            }
+            samples.sort((a, b) => a - b);
+            const lo = samples[Math.floor(samples.length * 0.01)];
+            const hi = samples[Math.floor(samples.length * 0.99)];
+            const range = (hi - lo) || 1;
+            for (let y = 0; y < h; y++) {
+                const row = state.elevation[y];
+                for (let x = 0; x < w; x++) row[x] = Math.max(0, Math.min(1, (row[x] - lo) / range));
+            }
+        }
+
+        // 1 in the centre, smoothly dropping to 0 toward the edges
+        const ISLAND_STRENGTH = 0.75;
+        function islandFalloff(d) {
+            const t = Math.max(0, Math.min(1, (d - 0.3) / 0.65));
+            return 1 - t * t * (3 - 2 * t);
+        }
+
+        function applyMask(w, h) {
+            if (state.mask === 'none') return;
+            for (let y = 0; y < h; y++) {
+                const ny = (y / h) * 2 - 1;
+                const row = state.elevation[y];
+                for (let x = 0; x < w; x++) {
+                    const nx = (x / w) * 2 - 1;
+                    if (state.mask === 'circle' || state.mask === 'square') {
+                        const d = state.mask === 'circle' ? Math.hypot(nx, ny) : Math.max(Math.abs(nx), Math.abs(ny));
+                        // Additive bias: raises the centre and sinks the rim, while keeping the noise detail everywhere
+                        row[x] = Math.max(0, Math.min(1, row[x] + (islandFalloff(d) - 0.55) * ISLAND_STRENGTH));
+                    } else if (state.mask === 'border') {
+                        const distFromEdge = Math.min(x, w - 1 - x, y, h - 1 - y) / (w * 0.15);
+                        row[x] *= Math.min(1, distFromEdge);
+                    }
+                }
+            }
+        }
+
+        function polishTerrain(w, h) {
+            // Two restrained passes soften pixel-scale spikes without flattening coastlines.
+            let source = state.elevation;
+            for (let pass = 0; pass < 2; pass++) {
+                const target = Array(h).fill(0).map(() => new Float32Array(w));
+                for (let y = 0; y < h; y++) {
+                    const out = target[y];
+                    for (let x = 0; x < w; x++) {
+                        let sum = 0, weight = 0;
+                        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                            const yy = Math.max(0, Math.min(h - 1, y + dy));
+                            const xx = Math.max(0, Math.min(w - 1, x + dx));
+                            const wt = (dx === 0 && dy === 0) ? 4 : (dx === 0 || dy === 0 ? 2 : 1);
+                            sum += source[yy][xx] * wt; weight += wt;
+                        }
+                        out[x] = source[y][x] * 0.58 + (sum / weight) * 0.42;
+                    }
+                }
+                source = target;
+            }
+            state.elevation = source;
+        }
+
+        function applyErosionPass(w, h) {
+            const smooth = Array(h).fill(0).map(() => new Float32Array(w));
+            for (let y = 1; y < h - 1; y++) {
+                const sRow = smooth[y];
+                const rPrev = state.elevation[y - 1];
+                const rCurr = state.elevation[y];
+                const rNext = state.elevation[y + 1];
+                for (let x = 1; x < w - 1; x++) {
+                    let avg = rPrev[x-1] + rPrev[x] + rPrev[x+1] +
+                              rCurr[x-1] + rCurr[x] + rCurr[x+1] +
+                              rNext[x-1] + rNext[x] + rNext[x+1];
+                    sRow[x] = (avg / 9.0) * 0.3 + rCurr[x] * 0.7;
+                }
+            }
+            for (let y = 1; y < h - 1; y++) {
+                const sRow = smooth[y];
+                const rCurr = state.elevation[y];
+                for (let x = 1; x < w - 1; x++) rCurr[x] = sRow[x];
+            }
+        }
+
+        function generateRivers(w, h) {
+            let count = 0;
+            const rng = makeRng(state.seed, 4242);
+            // Pick springs from high ground (relative to the actual terrain, so rivers appear on any preset)
+            let maxE = 0;
+            for (let y = 0; y < h; y += 4) for (let x = 0; x < w; x += 4) if (state.elevation[y][x] > maxE) maxE = state.elevation[y][x];
+            const springMin = Math.max(state.seaLevel + 0.1, maxE * 0.7);
+            for (let i = 0; i < 400 && count < 4; i++) {
+                let rx = Math.floor(rng() * (w - 20)) + 10;
+                let ry = Math.floor(rng() * (h - 20)) + 10;
+                if (state.elevation[ry][rx] > springMin) {
+                    let currX = rx, currY = ry;
+                    let steps = 0;
+                    while (steps < 200) {
+                        state.riversMap[currY][currX] = 1;
+                        if (state.elevation[currY][currX] <= state.seaLevel) break;
+
+                        let lowestElev = state.elevation[currY][currX];
+                        let nextX = currX, nextY = currY;
+
+                        for (let dy = -1; dy <= 1; dy++) {
+                            const ny = currY + dy;
+                            if (ny < 0 || ny >= h) continue;
+                            const rElev = state.elevation[ny];
+                            for (let dx = -1; dx <= 1; dx++) {
+                                const nx = currX + dx;
+                                if (nx >= 0 && nx < w) {
+                                    if (rElev[nx] < lowestElev) {
+                                        lowestElev = rElev[nx];
+                                        nextX = nx; nextY = ny;
+                                    }
+                                }
+                            }
+                        }
+                        if (nextX === currX && nextY === currY) break;
+                        currX = nextX; currY = nextY;
+                        steps++;
+                    }
+                    count++;
+                }
+            }
+        }
+
+        function generateVillages(w, h) {
+            let placed = 0;
+            const rng = makeRng(state.seed, 777);
+            const stepV = Math.max(10, Math.round(w / 17));
+            for (let y = 10; y < h - 10; y += stepV) {
+                const rElev = state.elevation[y];
+                const rRiver = state.riversMap[y];
+                const rVill = state.villagesMap[y];
+                for (let x = 10; x < w - 10; x += stepV) {
+                    const e = rElev[x];
+                    if (e > state.seaLevel + 0.05 && e < 0.60 && !rRiver[x] && rng() < 0.15 && placed < 6) {
+                        rVill[x] = 1;
+                        placed++;
+                    }
+                }
+            }
+        }
+
+        // --- Canvas Rendering Core ---
+        function resizeCanvasContainer() {
+            const container = document.getElementById('canvasContainer');
+            // Measure with the canvas hidden so its own size can't feed back into the measurement
+            canvas.style.display = 'none';
+            const availW = container.clientWidth, availH = container.clientHeight;
+            canvas.style.display = '';
+            const size = Math.max(260, Math.floor(Math.min(availW - 30, availH - 30, 750)));
+            canvas.width = size;
+            canvas.height = size;
+        }
+
+        function renderCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            canvas.style.cursor = state.viewMode === '3d' ? (state.drag3D ? 'grabbing' : 'grab') : '';
+            const w = state.width, h = state.height;
+
+            if (state.viewMode === '2d' || state.viewMode === 'thermal' || state.viewMode === 'normal' || state.viewMode === 'slope') {
+                offscreenCanvas.width = w;
+                offscreenCanvas.height = h;
+                const imgData = offCtx.createImageData(w, h);
+                const data = imgData.data;
+                const seaLevel = state.seaLevel;
+                const isThermal = state.palette === 'thermal';
+                const isMono = state.palette === 'monochrome';
+                const isCustom = state.palette === 'custom';
+                const pal = palettes[state.palette];
+                const c = state.customColors;
+                const cloudNoise = state.viewMode === '2d' ? new FastSimplexNoise(state.seed + '_cloudveil') : null;
+
+                for (let y = 0; y < h; y++) {
+                    const row = state.elevation[y];
+                    const rPrev = y > 0 ? state.elevation[y-1] : row;
+                    const rNext = y < h-1 ? state.elevation[y+1] : row;
+                    const rRiver = state.riversMap[y];
+
+                    for (let x = 0; x < w; x++) {
+                        const idx = (y * w + x) * 4;
+                        const elev = row[x];
+                        let red = 0, green = 0, blue = 0;
+
+                        if (isThermal) {
+                            red = Math.floor(elev * 255);
+                            green = 30;
+                            blue = Math.floor((1 - elev) * 255);
+                        } else if (isMono) {
+                            red = green = blue = Math.floor(elev * 255);
+                        } else if (isCustom) {
+                            let col = c.snow;
+                            if (elev <= seaLevel * 0.7) col = c.waterDeep;
+                            else if (elev <= seaLevel) col = c.waterShallow;
+                            else if (elev <= seaLevel + 0.05) col = c.sand;
+                            else if (elev <= 0.65) col = c.grass;
+                            else if (elev <= 0.80) col = c.forest;
+                            else if (elev <= 0.92) col = c.rock;
+                            red = col[0]; green = col[1]; blue = col[2];
+                        } else {
+                            const col = state.palette === 'earth' ? getEarthBiomeColor(x, y, elev) : (() => {
+                                let chosen = pal[pal.length - 1].color;
+                                const pe = paletteElev(elev);
+                                for (let i = 0; i < pal.length; i++) { if (pe <= pal[i].max) { chosen = pal[i].color; break; } }
+                                return chosen;
+                            })();
+                            red = col[0]; green = col[1]; blue = col[2];
+                        }
+
+                        if (state.viewMode === '2d') {
+                            if (x > 0 && y > 0) {
+                                const dx = (row[x + (x < w-1 ? 1 : 0)] - row[x - 1]);
+                                const dy = (rNext[x] - rPrev[x]);
+                                const slope = Math.hypot(dx, dy);
+                                const shade = Math.max(-34, Math.min(38, (-dx * 92 - dy * 70) + 8));
+                                const ambient = Math.max(0.78, 1 - slope * 0.55);
+                                red = Math.max(0, Math.min(255, red * ambient + shade));
+                                green = Math.max(0, Math.min(255, green * ambient + shade));
+                                blue = Math.max(0, Math.min(255, blue * ambient + shade));
+                            }
+                            if (rRiver[x] && elev > seaLevel) {
+                                red = 0; green = 200; blue = 255;
+                            }
+                            // Delicate high-altitude cloud wisps add atmosphere without hiding the map.
+                            const cloud = cloudNoise.noise2D(x / Math.max(28, w * 0.105) + 12.4,
+                                                             y / Math.max(28, h * 0.105) - 7.8) * 0.5 + 0.5;
+                            const cloudDetail = cloudNoise.noise2D(x / Math.max(12, w * 0.035) - 3.1,
+                                                                   y / Math.max(12, h * 0.035) + 18.6) * 0.5 + 0.5;
+                            const veil = Math.max(0, (cloud * 0.76 + cloudDetail * 0.24) - 0.60);
+                            const cloudAlpha = Math.min(0.19, veil * 0.43);
+                            red = red * (1 - cloudAlpha) + 246 * cloudAlpha;
+                            green = green * (1 - cloudAlpha) + 250 * cloudAlpha;
+                            blue = blue * (1 - cloudAlpha) + 255 * cloudAlpha;
+                        } else if (state.viewMode === 'normal') {
+                            const l = x > 0 ? row[x-1] : elev;
+                            const r = x < w-1 ? row[x+1] : elev;
+                            const u = rPrev[x];
+                            const d = rNext[x];
+                            const nx = (l - r) * 2.0, ny = (u - d) * 2.0, nz = 1.0;
+                            const len = Math.hypot(nx, ny, nz);
+                            red = Math.floor(((nx / len) + 1) * 127.5);
+                            green = Math.floor(((ny / len) + 1) * 127.5);
+                            blue = Math.floor((nz / len) * 255);
+                        } else if (state.viewMode === 'slope') {
+                            const l = x > 0 ? row[x-1] : elev;
+                            const r = x < w-1 ? row[x+1] : elev;
+                            const u = rPrev[x];
+                            const d = rNext[x];
+                            const slope = Math.min(1.0, Math.hypot(r - l, d - u) * 4.0);
+                            red = green = blue = Math.floor((1 - slope) * 255);
+                        }
+
+                        data[idx] = red;
+                        data[idx+1] = green;
+                        data[idx+2] = blue;
+                        data[idx+3] = 255;
+                    }
+                }
+
+                offCtx.putImageData(imgData, 0, 0);
+
+                ctx.save();
+                const scale = (canvas.width / w) * state.zoom;
+                const startX = (canvas.width - w * scale) / 2 + state.offsetX;
+                const startY = (canvas.height - h * scale) / 2 + state.offsetY;
+                ctx.imageSmoothingEnabled = state.smoothness;
+                ctx.drawImage(offscreenCanvas, startX, startY, w * scale, h * scale);
+
+                if (state.viewMode === '2d') {
+                    for (let y = 0; y < h; y++) {
+                        const rVill = state.villagesMap[y];
+                        for (let x = 0; x < w; x++) {
+                            if (rVill[x]) {
+                                ctx.fillStyle = '#ff0055';
+                                ctx.beginPath();
+                                ctx.arc(startX + (x + 0.5) * scale, startY + (y + 0.5) * scale, Math.max(3, scale * 1.5), 0, Math.PI * 2);
+                                ctx.fill();
+                                ctx.strokeStyle = '#ffffff';
+                                ctx.lineWidth = 1;
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                }
+                if (state.viewMode === '2d' && state.propsDensity > 0 && !isMono && !isThermal) {
+                    drawProps(w, h, startX, startY, scale);
+                }
+                ctx.restore();
+
+            } else if (state.viewMode === '3d') {
+                render3D();
+
+            } else if (state.viewMode === 'contour') {
+                ctx.fillStyle = state.palette === 'paper' ? '#ebd8b2' : '#090a0f';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const scale = (canvas.width / w) * state.zoom;
+                const startX = (canvas.width - w * scale) / 2 + state.offsetX;
+                const startY = (canvas.height - h * scale) / 2 + state.offsetY;
+
+                for (let y = 0; y < h - 1; y++) {
+                    const row = state.elevation[y];
+                    for (let x = 0; x < w - 1; x++) {
+                        const e = row[x];
+                        for (let level = 1; level <= 10; level++) {
+                            const threshold = level / 10;
+                            if (Math.abs(e - threshold) < 0.015) {
+                                ctx.fillStyle = state.palette === 'paper' ? '#4a3b2c' : (level % 2 === 0 ? '#00f0ff' : '#ff007f');
+                                ctx.fillRect(startX + x * scale, startY + y * scale, Math.max(1, scale), Math.max(1, scale));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Deterministic decorative props (trees on lowlands/forest, peaks on high ground)
+        function drawProps(w, h, startX, startY, scale) {
+            const density = [0, 0.012, 0.03, 0.06][state.propsDensity];
+            const rng = makeRng(state.seed, 31337);
+            const sl = state.seaLevel;
+            const px = Math.max(1.5, scale * 0.9);
+            for (let y = 1; y < h - 1; y++) {
+                const row = state.elevation[y];
+                const rRiver = state.riversMap[y];
+                for (let x = 1; x < w - 1; x++) {
+                    const r = rng();
+                    if (r > density) continue;
+                    const e = row[x];
+                    if (e <= sl + 0.06 || rRiver[x]) continue;
+                    const sx = startX + (x + 0.5) * scale, sy = startY + (y + 0.5) * scale;
+                    if (e < 0.78) {
+                        ctx.fillStyle = e < 0.58 ? 'rgba(54,91,48,0.78)' : 'rgba(34,76,48,0.86)';
+                        ctx.beginPath();
+                        ctx.moveTo(sx, sy - px * 1.4); ctx.lineTo(sx - px, sy + px * 0.6); ctx.lineTo(sx + px, sy + px * 0.6);
+                        ctx.closePath(); ctx.fill();
+                    } else {
+                        ctx.fillStyle = 'rgba(40,40,45,0.8)';
+                        ctx.beginPath();
+                        ctx.moveTo(sx, sy - px * 1.5); ctx.lineTo(sx - px * 1.2, sy + px * 0.8); ctx.lineTo(sx + px * 1.2, sy + px * 0.8);
+                        ctx.closePath(); ctx.fill();
+                    }
+                }
+            }
+        }
+
+        // --- True 3D terrain renderer (lit heightfield mesh, painter's algorithm) ---
+        function render3D() {
+            const cw = canvas.width, ch = canvas.height;
+            const w = state.width, h = state.height;
+            const paper = state.palette === 'paper';
+
+            // Sky / backdrop
+            const bg = ctx.createLinearGradient(0, 0, 0, ch);
+            bg.addColorStop(0, paper ? '#cdbb8e' : '#eaf2fa');
+            bg.addColorStop(1, paper ? '#ebd8b2' : '#c9d9e9');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, cw, ch);
+
+            // Sample the heightfield on a coarser grid (lower detail while dragging for smoothness)
+            const target = state.drag3D ? 80 : 150;
+            const stride = Math.max(1, Math.ceil(Math.max(w, h) / target));
+            const nx = Math.floor((w - 1) / stride) + 1;
+            const ny = Math.floor((h - 1) / stride) + 1;
+            const H = new Float32Array(nx * ny);
+            for (let j = 0; j < ny; j++) {
+                const row = state.elevation[Math.min(h - 1, j * stride)];
+                for (let i = 0; i < nx; i++) H[j * nx + i] = row[Math.min(w - 1, i * stride)];
+            }
+
+            // Rivers / villages mapped onto the coarse grid
+            const riverCell = new Uint8Array(nx * ny);
+            const villCell = new Uint8Array(nx * ny);
+            for (let y = 0; y < h; y++) {
+                const rr = state.riversMap[y], vr = state.villagesMap[y];
+                const cj = Math.min(ny - 1, Math.floor(y / stride));
+                for (let x = 0; x < w; x++) {
+                    if (rr[x]) riverCell[cj * nx + Math.min(nx - 1, Math.floor(x / stride))] = 1;
+                    if (vr[x]) villCell[cj * nx + Math.min(nx - 1, Math.floor(x / stride))] = 1;
+                }
+            }
+
+            const sea = state.seaLevel;
+            const rad = (state.angle3D * Math.PI) / 180;
+            const cosA = Math.cos(rad), sinA = Math.sin(rad);
+            const pr = (state.pitch3D * Math.PI) / 180;
+            const sinP = Math.sin(pr), cosP = Math.cos(pr);
+            const S = Math.min(cw, ch) * 0.68 * state.zoom;
+            const hs = 0.30 * state.height3D;                 // world height of elevation 1.0 (in map widths)
+            const cx = cw / 2 + state.offsetX;
+            const cy = ch * 0.52 + S * 0.06 * cosP + state.offsetY;
+            const cell = 1 / (Math.max(nx, ny) - 1);          // world size of one cell
+
+            // Project every vertex once
+            const SX = new Float32Array(nx * ny), SY = new Float32Array(nx * ny);
+            const RZ = new Float32Array(nx * ny);
+            const HV = new Float32Array(nx * ny);             // display height (water is flat at sea level)
+            for (let j = 0; j < ny; j++) {
+                const v = j / (ny - 1) - 0.5;
+                for (let i = 0; i < nx; i++) {
+                    const u = i / (nx - 1) - 0.5;
+                    const k = j * nx + i;
+                    const hv = Math.max(H[k], sea);
+                    HV[k] = hv;
+                    const rx = u * cosA - v * sinA;
+                    const rz = u * sinA + v * cosA;
+                    RZ[k] = rz;
+                    SX[k] = cx + rx * S;
+                    SY[k] = cy + rz * S * sinP - hv * hs * S * cosP;
+                }
+            }
+
+            const baseDrop = 0.05 * S * cosP;                 // how far skirts hang below sea level
+            const seaY = (k) => cy + RZ[k] * S * sinP - sea * hs * S * cosP;
+            const shadeCol = (c, f) => `rgb(${Math.max(0, Math.min(255, c[0] * f)) | 0},${Math.max(0, Math.min(255, c[1] * f)) | 0},${Math.max(0, Math.min(255, c[2] * f)) | 0})`;
+
+            // Skirts (the "diorama" sides of the map block), drawn first so terrain covers any hidden ones
+            const skirt = (ka, kb) => {
+                const ea = (H[ka] + H[kb]) / 2;
+                const c = getColorForElevation(ea, Math.min(w - 1, (ka % nx) * stride), Math.min(h - 1, Math.floor(ka / nx) * stride));
+                ctx.fillStyle = ctx.strokeStyle = shadeCol(c, 0.42);
+                ctx.lineWidth = 0.75;
+                ctx.beginPath();
+                ctx.moveTo(SX[ka], SY[ka]); ctx.lineTo(SX[kb], SY[kb]);
+                ctx.lineTo(SX[kb], seaY(kb) + baseDrop); ctx.lineTo(SX[ka], seaY(ka) + baseDrop);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            };
+            for (let i = 0; i < nx - 1; i++) {
+                skirt(i, i + 1);
+                skirt((ny - 1) * nx + i, (ny - 1) * nx + i + 1);
+            }
+            for (let j = 0; j < ny - 1; j++) {
+                skirt(j * nx, (j + 1) * nx);
+                skirt(j * nx + nx - 1, (j + 1) * nx + nx - 1);
+            }
+
+            // Sun direction (fixed in world space so the lighting visibly turns as you rotate)
+            const Lx = -0.55, Ly = -0.55, Lz = 0.63;
+            const density = [0, 0.05, 0.11, 0.2][state.propsDensity];
+            const csz = S * cell;                             // approx. cell size in pixels
+
+            // Painter's order: farthest cells first, based on rotation
+            const jStart = cosA >= 0 ? 0 : ny - 2, jEnd = cosA >= 0 ? ny - 1 : -1, jStep = cosA >= 0 ? 1 : -1;
+            const iStart = sinA >= 0 ? 0 : nx - 2, iEnd = sinA >= 0 ? nx - 1 : -1, iStep = sinA >= 0 ? 1 : -1;
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = 0.8;
+
+            for (let j = jStart; j !== jEnd; j += jStep) {
+                for (let i = iStart; i !== iEnd; i += iStep) {
+                    const a = j * nx + i, b = a + 1, d = a + nx, c = d + 1;
+                    const e = (H[a] + H[b] + H[c] + H[d]) * 0.25;
+                    const isWater = e <= sea;
+
+                    // Surface normal from display heights
+                    const dhdu = ((HV[b] + HV[c]) - (HV[a] + HV[d])) * 0.5 * hs / cell;
+                    const dhdv = ((HV[d] + HV[c]) - (HV[a] + HV[b])) * 0.5 * hs / cell;
+                    const nlen = Math.sqrt(dhdu * dhdu + dhdv * dhdv + 1);
+                    const dot = Math.max(0, (-dhdu * Lx - dhdv * Ly + Lz) / nlen);
+                    const shade = isWater ? 1.0 : 0.40 + 0.88 * dot;
+
+                    let col = getColorForElevation(e, Math.min(w - 1, i * stride), Math.min(h - 1, j * stride));
+                    if (!isWater && riverCell[a]) col = [0, 200, 255];
+
+                    ctx.fillStyle = ctx.strokeStyle = shadeCol(col, shade);
+                    ctx.beginPath();
+                    ctx.moveTo(SX[a], SY[a]); ctx.lineTo(SX[b], SY[b]);
+                    ctx.lineTo(SX[c], SY[c]); ctx.lineTo(SX[d], SY[d]);
+                    ctx.closePath();
+                    ctx.fill(); ctx.stroke();
+
+                    if (isWater) continue;
+                    const mx = (SX[a] + SX[b] + SX[c] + SX[d]) * 0.25;
+                    const my = (SY[a] + SY[b] + SY[c] + SY[d]) * 0.25;
+
+                    // Props: deterministic trees / rocky peaks
+                    if (density > 0 && !riverCell[a] && e > sea + 0.06) {
+                        const hash = (((i * 73856093) ^ (j * 19349663)) >>> 0) % 1000 / 1000;
+                        if (hash < density) {
+                            const th = Math.max(3, csz * 2.4);
+                            const tw = th * 0.38;
+                            if (e < 0.78) {
+                                ctx.fillStyle = shadeCol([14, 70, 28], 0.8 + 0.4 * dot);
+                                ctx.beginPath();
+                                ctx.moveTo(mx, my - th); ctx.lineTo(mx - tw, my); ctx.lineTo(mx + tw, my);
+                                ctx.closePath(); ctx.fill();
+                            } else {
+                                ctx.fillStyle = shadeCol([90, 90, 98], 0.8 + 0.4 * dot);
+                                ctx.beginPath();
+                                ctx.moveTo(mx, my - th * 1.2); ctx.lineTo(mx - tw * 1.3, my); ctx.lineTo(mx + tw * 1.3, my);
+                                ctx.closePath(); ctx.fill();
+                            }
+                        }
+                    }
+
+                    // Villages: pin + glowing marker
+                    if (villCell[a]) {
+                        const r = Math.max(3.5, csz * 0.9);
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx, my - r * 2.2); ctx.stroke();
+                        ctx.fillStyle = '#ff0055';
+                        ctx.beginPath(); ctx.arc(mx, my - r * 2.2, r, 0, Math.PI * 2); ctx.fill();
+                        ctx.stroke();
+                        ctx.lineWidth = 0.8;
+                    }
+                }
+            }
+
+            // Hint overlay
+            ctx.font = '11px ui-monospace, Menlo, monospace';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = paper ? 'rgba(60,45,30,0.7)' : 'rgba(176,187,222,0.65)';
+            ctx.fillText('Drag to orbit  \u00b7  Scroll to zoom', cw / 2, ch - 10);
+        }
+
+        function getColorForElevation(elev, x = 0, y = 0) {
+            if (state.palette === 'earth') return getEarthBiomeColor(x, y, elev);
+            if (state.palette === 'thermal') {
+                return [Math.floor(elev * 255), 30, Math.floor((1 - elev) * 255)];
+            }
+            if (state.palette === 'monochrome') {
+                const v = Math.floor(elev * 255);
+                return [v, v, v];
+            }
+            if (state.palette === 'custom') {
+                const c = state.customColors;
+                if (elev <= state.seaLevel * 0.7) return c.waterDeep;
+                if (elev <= state.seaLevel) return c.waterShallow;
+                if (elev <= state.seaLevel + 0.05) return c.sand;
+                if (elev <= 0.65) return c.grass;
+                if (elev <= 0.80) return c.forest;
+                if (elev <= 0.92) return c.rock;
+                return c.snow;
+            }
+
+            const pal = palettes[state.palette];
+            const pe = paletteElev(elev);
+            for (let item of pal) {
+                if (pe <= item.max) return item.color;
+            }
+            return pal[pal.length - 1].color;
+        }
+
+        function updateStats() {
+            const w = state.width, h = state.height;
+            let min = 1.0, max = 0.0, water = 0, forest = 0, rivers = 0, villages = 0;
+            const total = w * h;
+
+            for (let y = 0; y < h; y++) {
+                const rElev = state.elevation[y];
+                const rRiver = state.riversMap[y];
+                const rVill = state.villagesMap[y];
+                for (let x = 0; x < w; x++) {
+                    const e = rElev[x];
+                    if (e < min) min = e;
+                    if (e > max) max = e;
+                    if (e <= state.seaLevel) water++;
+                    else if (e > 0.60 && e <= 0.80) forest++;
+
+                    if (rRiver[x]) rivers++;
+                    if (rVill[x]) villages++;
+                }
+            }
+
+            document.getElementById('statMinMax').innerText = `${min.toFixed(2)} - ${max.toFixed(2)}`;
+            document.getElementById('statWater').innerText = `${((water / total) * 100).toFixed(1)}%`;
+            document.getElementById('statForest').innerText = `${((forest / total) * 100).toFixed(1)}%`;
+            document.getElementById('statNodes').innerText = `${rivers} pts / ${villages} vil`;
+        }
+
+        // --- Interactive Sculpting Events ---
+        function setupCanvasEvents() {
+            const syncAngleSlider = () => {
+                document.getElementById('angle3DRange').value = state.angle3D;
+            };
+            const orbit = (dx, dy) => {
+                state.angle3D = ((state.angle3D + dx * 0.5) % 360 + 360) % 360;
+                state.pitch3D = Math.max(15, Math.min(85, state.pitch3D + dy * 0.3));
+                syncAngleSlider();
+                renderCanvas();
+            };
+
+            canvas.addEventListener('mousedown', (e) => {
+                if (state.viewMode === '3d') { state.drag3D = { x: e.clientX, y: e.clientY }; renderCanvas(); e.preventDefault(); return; }
+                state.isMouseDown = true; sculpt(e);
+            });
+            window.addEventListener('mouseup', () => {
+                state.isMouseDown = false;
+                if (state.drag3D) { state.drag3D = null; renderCanvas(); }
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (state.drag3D) {
+                    const dx = e.clientX - state.drag3D.x, dy = e.clientY - state.drag3D.y;
+                    state.drag3D = { x: e.clientX, y: e.clientY };
+                    orbit(dx, dy);
+                }
+            });
+            canvas.addEventListener('mousemove', (e) => {
+                if (state.viewMode === '3d') { document.getElementById('mapTooltip').classList.add('hidden'); return; }
+                updateTooltip(e);
+                if (state.isMouseDown) sculpt(e);
+            });
+            canvas.addEventListener('mouseleave', () => {
+                document.getElementById('mapTooltip').classList.add('hidden');
+            });
+
+            // Scroll to zoom (all views)
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                state.zoom = Math.max(0.5, Math.min(4.0, state.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+                renderCanvas();
+            }, { passive: false });
+
+            // Touch orbit for 3D view
+            canvas.addEventListener('touchstart', (e) => {
+                if (state.viewMode !== '3d' || e.touches.length !== 1) return;
+                state.drag3D = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                e.preventDefault();
+            }, { passive: false });
+            canvas.addEventListener('touchmove', (e) => {
+                if (!state.drag3D || e.touches.length !== 1) return;
+                const t = e.touches[0];
+                const dx = t.clientX - state.drag3D.x, dy = t.clientY - state.drag3D.y;
+                state.drag3D = { x: t.clientX, y: t.clientY };
+                orbit(dx, dy);
+                e.preventDefault();
+            }, { passive: false });
+            canvas.addEventListener('touchend', () => { if (state.drag3D) { state.drag3D = null; renderCanvas(); } });
+        }
+
+        function getCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+            const w = state.width, h = state.height;
+            const scale = (canvas.width / w) * state.zoom;
+            const startX = (canvas.width - w * scale) / 2 + state.offsetX;
+            const startY = (canvas.height - h * scale) / 2 + state.offsetY;
+
+            return {
+                x: Math.floor((mouseX - startX) / scale),
+                y: Math.floor((mouseY - startY) / scale)
+            };
+        }
+
+        function updateTooltip(e) {
+            const { x, y } = getCoords(e);
+            const tooltip = document.getElementById('mapTooltip');
+            if (x >= 0 && x < state.width && y >= 0 && y < state.height) {
+                tooltip.classList.remove('hidden');
+                const elev = state.elevation[y][x];
+                document.getElementById('tipCoords').innerText = `X: ${x}, Y: ${y}`;
+                document.getElementById('tipHeight').innerText = elev.toFixed(2);
+                document.getElementById('tipBiome').innerText = elev <= state.seaLevel ? 'Water' : (elev > 0.8 ? 'Mountain Peak' : 'Plains');
+            } else {
+                tooltip.classList.add('hidden');
+            }
+        }
+
+        function sculpt(e) {
+            const { x, y } = getCoords(e);
+            const r = state.brushSize, str = state.brushStrength, mode = state.brushMode;
+            if (x < 0 || x >= state.width || y < 0 || y >= state.height) return;
+
+            if (mode === 'village') {
+                state.villagesMap[y][x] = 1;
+            } else if (mode === 'river') {
+                state.riversMap[y][x] = 1;
+                state.elevation[y][x] = Math.max(0.1, state.seaLevel - 0.05);
+            } else {
+                const targetVal = state.elevation[y][x];
+                for (let dy = -r; dy <= r; dy++) {
+                    const ny = y + dy;
+                    if (ny < 0 || ny >= state.height) continue;
+                    const rElev = state.elevation[ny];
+                    for (let dx = -r; dx <= r; dx++) {
+                        const nx = x + dx;
+                        if (nx >= 0 && nx < state.width) {
+                            const dist = Math.hypot(dx, dy);
+                            if (dist <= r) {
+                                const falloff = (1 - (dist / r)) * str;
+                                if (mode === 'raise') rElev[nx] = Math.min(1.0, rElev[nx] + falloff);
+                                else if (mode === 'lower') rElev[nx] = Math.max(0.0, rElev[nx] - falloff);
+                                else if (mode === 'flatten') rElev[nx] = targetVal;
+                                else if (mode === 'smooth') rElev[nx] = rElev[nx] * (1 - falloff) + targetVal * falloff;
+                            }
+                        }
+                    }
+                }
+            }
+            renderCanvas();
+            updateStats();
+        }
+
+        // --- Export Functions ---
+        function exportFullMapPNG() {
+            const w = state.width, h = state.height;
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const x = c.getContext('2d');
+            const img = x.createImageData(w, h);
+            const seaLevel = state.seaLevel;
+
+            for (let py = 0; py < h; py++) {
+                const row = state.elevation[py];
+                const rRiver = state.riversMap[py];
+                for (let px = 0; px < w; px++) {
+                    const i = (py * w + px) * 4;
+                    const elev = row[px];
+                    let col = getColorForElevation(elev);
+
+                    if (rRiver[px] && elev > seaLevel) col = [0, 200, 255];
+
+                    img.data[i] = col[0]; img.data[i+1] = col[1]; img.data[i+2] = col[2]; img.data[i+3] = 255;
+                }
+            }
+            x.putImageData(img, 0, 0);
+            download(c.toDataURL('image/png'), `map_${state.seed}_${w}x${h}.png`);
+            showToast('Downloaded', `Full Map PNG exported (${w}x${h}).`);
+        }
+
+        function exportHeightmapPNG() {
+            const w = state.width, h = state.height;
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const x = c.getContext('2d');
+            const img = x.createImageData(w, h);
+
+            for (let py = 0; py < h; py++) {
+                const row = state.elevation[py];
+                for (let px = 0; px < w; px++) {
+                    const i = (py * w + px) * 4;
+                    const v = Math.floor(row[px] * 255);
+                    img.data[i] = v; img.data[i+1] = v; img.data[i+2] = v; img.data[i+3] = 255;
+                }
+            }
+            x.putImageData(img, 0, 0);
+            download(c.toDataURL('image/png'), `heightmap_${state.seed}.png`);
+            showToast('Downloaded', 'Grayscale Heightmap PNG saved.');
+        }
+
+        function exportNormalMapPNG() {
+            const w = state.width, h = state.height;
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const x = c.getContext('2d');
+            const img = x.createImageData(w, h);
+
+            for (let py = 0; py < h; py++) {
+                const row = state.elevation[py];
+                const rPrev = py > 0 ? state.elevation[py-1] : row;
+                const rNext = py < h-1 ? state.elevation[py+1] : row;
+                for (let px = 0; px < w; px++) {
+                    const i = (py * w + px) * 4;
+                    const l = px > 0 ? row[px-1] : row[px];
+                    const r = px < w-1 ? row[px+1] : row[px];
+                    const u = rPrev[px];
+                    const d = rNext[px];
+
+                    const nx = (l - r) * 2.0, ny = (u - d) * 2.0, nz = 1.0;
+                    const len = Math.hypot(nx, ny, nz);
+
+                    img.data[i] = Math.floor(((nx / len) + 1) * 127.5);
+                    img.data[i+1] = Math.floor(((ny / len) + 1) * 127.5);
+                    img.data[i+2] = Math.floor((nz / len) * 255);
+                    img.data[i+3] = 255;
+                }
+            }
+            x.putImageData(img, 0, 0);
+            download(c.toDataURL('image/png'), `normalmap_${state.seed}.png`);
+            showToast('Downloaded', 'Normal Map PNG saved.');
+        }
+
+        function exportJSONData() {
+            const data = {
+                seed: state.seed,
+                width: state.width,
+                height: state.height,
+                seaLevel: state.seaLevel,
+                nation: state.nation,
+                elevation: state.elevation.map(r => Array.from(r, v => Math.round(v * 1000) / 1000)),
+                rivers: state.riversMap.map(r => Array.from(r)),
+                villages: state.villagesMap.map(r => Array.from(r))
+            };
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            download(URL.createObjectURL(blob), `map_data_${state.seed}.json`);
+            showToast('Downloaded', 'JSON Terrain Matrix & Nation Data saved.');
+        }
+
+        function copySeedToClipboard() {
+            const config = JSON.stringify({
+                seed: state.seed,
+                nation: state.nation.fullName,
+                algorithm: state.algorithm,
+                resolution: `${state.width}x${state.height}`,
+                scale: state.scale,
+                octaves: state.octaves,
+                palette: state.palette
+            }, null, 2);
+            copyToClipboard(config);
+            showToast('Copied', 'Seed configuration copied to clipboard.');
+        }
+
+        function updateCodeSnippet(type) {
+            const codeBox = document.getElementById('codeDisplay');
+            if (type === 'unity') {
+                codeBox.value = `// Unity C# Heightmap Terrain Loader
+using UnityEngine;
+
+public class TerrainLoader : MonoBehaviour {
+    public Texture2D heightmapTexture;
+    public Terrain terrain;
+
+    void Start() {
+        TerrainData data = terrain.terrainData;
+        int res = heightmapTexture.width;
+        float[,] heights = new float[res, res];
+
+        for (int y = 0; y < res; y++) {
+            for (int x = 0; x < res; x++) {
+                heights[y, x] = heightmapTexture.GetPixel(x, y).grayscale;
+            }
+        }
+        data.SetHeights(0, 0, heights);
+    }
+}`;
+            } else {
+                codeBox.value = `# Godot GDScript Terrain Generator Reader
+extends Node3D
+
+@export var heightmap_img: Texture2D
+
+func _ready():
+    var img = heightmap_img.get_image()
+    var width = img.get_width()
+    var height = img.get_height()
+    
+    for y in range(height):
+        for x in range(width):
+            var elev = img.get_pixel(x, y).r
+            # Spawn your mesh / tile chunk with height: elev
+`;
+            }
+        }
+
+        function download(url, filename) {
+            const a = document.createElement('a');
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
+            } else legacyCopy(text);
+        }
+
+        function legacyCopy(text) {
+            const el = document.createElement('textarea');
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+        }
+
+        function showToast(title, msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastTitle').innerText = title;
+            document.getElementById('toastMsg').innerText = msg;
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-24', 'opacity-0'), 3000);
+        }
+    </script>
+</body>
+</html>
